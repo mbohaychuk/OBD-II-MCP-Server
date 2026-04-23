@@ -18,6 +18,7 @@ EXPECTED_TOOLS: frozenset[str] = frozenset(
         "read_dtcs",
         "read_freeze_frame",
         "read_readiness_monitors",
+        "lookup_recalls_and_complaints",
         "clear_dtcs",
     }
 )
@@ -51,6 +52,7 @@ async def test_read_tools_are_marked_read_only() -> None:
         "read_dtcs",
         "read_freeze_frame",
         "read_readiness_monitors",
+        "lookup_recalls_and_complaints",
     ):
         ann = by_name[name].annotations
         assert ann is not None, name

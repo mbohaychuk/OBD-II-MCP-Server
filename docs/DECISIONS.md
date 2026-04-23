@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-04-23 — Tool renamed: `lookup_tsbs_and_recalls` → `lookup_recalls_and_complaints`
+
+**Context.** Phase 3 plan named this tool `lookup_tsbs_and_recalls`. Probing NHTSA's public API showed only `/recalls/recallsByVehicle` and `/complaints/complaintsByVehicle` answer unauthenticated; `/investigations/investigationsByVehicle` and `/bulletins/*` return "Missing Authentication Token". TSB bulletins are manufacturer-copyrighted and not published via public API.
+**Decision.** Rename the tool to match what the API actually serves. Recalls + complaints are the two endpoints available; leave TSB-style repair knowledge to the optional `lookup_repair_info` → Sidekick passthrough.
+**Why.** Naming a tool after content we can't deliver is a silent lie to the LLM (and therefore the user). A TSB-shaped prompt becomes a no-op at runtime. Scope to what exists.
+
 ## 2026-04-23 — Error taxonomy surfaces as `[CODE] message` exception string
 
 **Context.** Phase 2 promises a "structured error response, not a Python exception trace" for connection-level failures. MCP's `CallToolResult.isError=true` shape has only text content — no reserved field for an error code.
