@@ -21,6 +21,7 @@ from obd.codes import BASE_TESTS, COMPRESSION_TESTS, SPARK_TESTS
 from obd_mcp.client import ObdClient
 from obd_mcp.dtc_db import DtcDatabase
 from obd_mcp.nhtsa import lookup_complaints, lookup_recalls
+from obd_mcp.sidekick import fetch_repair_info
 from obd_mcp.vin import decode_vin
 
 DTC_SCOPES: frozenset[str] = frozenset({"stored", "pending", "all"})
@@ -406,5 +407,40 @@ async def lookup_recalls_and_complaints(
         "model": model,
         "recalls": recalls,
         "complaints": complaints,
+        "timestamp": time.time(),
+    }
+
+
+async def lookup_repair_info(
+    *,
+    sidekick_url: str,
+    dtc: str,
+    year: int | None = None,
+    make: str | None = None,
+    model: str | None = None,
+    http_client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """Forward a DTC + vehicle context to a Mechanics Sidekick endpoint.
+
+    Sidekick (a separate RAG project) owns the repair corpus; `obd-mcp`
+    just proxies. On any Sidekick outage the response envelope collapses
+    to `available=False` with a human-readable `error` — the caller's
+    context (dtc/year/make/model) is echoed back so the LLM can narrate
+    the outage without re-asking the user.
+    """
+    sidekick_response = await fetch_repair_info(
+        sidekick_url,
+        dtc=dtc,
+        year=year,
+        make=make,
+        model=model,
+        client=http_client,
+    )
+    return {
+        **sidekick_response,
+        "dtc": dtc,
+        "year": year,
+        "make": make,
+        "model": model,
         "timestamp": time.time(),
     }

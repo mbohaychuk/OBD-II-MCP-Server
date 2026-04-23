@@ -191,5 +191,44 @@ async def clear_dtcs(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
     return await T.clear_dtcs(_app(ctx).client, confirm)
 
 
+def register_sidekick_tool(server: FastMCP, sidekick_url: str) -> None:
+    """Attach `lookup_repair_info` to `server`, bound to `sidekick_url`.
+
+    Factored out so it can be invoked at import-time when the env var is
+    set, and directly from tests with a stub URL.
+    """
+
+    @server.tool(
+        name="lookup_repair_info",
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
+    )
+    async def _lookup_repair_info(
+        ctx: Context,  # type: ignore[type-arg]  # noqa: ARG001
+        dtc: str,
+        year: int | None = None,
+        make: str | None = None,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """Look up repair information for a DTC via Mechanics Sidekick.
+
+        Returns `{available, summary, sources, error, dtc, year, make,
+        model, timestamp}`. When Sidekick is unreachable or returns a
+        non-200, `available` is False and `error` carries a short reason
+        — the tool never raises.
+        """
+        return await T.lookup_repair_info(
+            sidekick_url=sidekick_url,
+            dtc=dtc,
+            year=year,
+            make=make,
+            model=model,
+        )
+
+
+_SIDEKICK_URL = os.environ.get("SIDEKICK_URL")
+if _SIDEKICK_URL:
+    register_sidekick_tool(mcp, _SIDEKICK_URL)
+
+
 def main() -> None:
     mcp.run()
