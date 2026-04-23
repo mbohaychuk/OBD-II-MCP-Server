@@ -149,6 +149,26 @@ class _ClearDtcsConfirmation(BaseModel):
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
+)
+async def lookup_recalls_and_complaints(
+    ctx: Context,  # type: ignore[type-arg]  # noqa: ARG001
+    year: int,
+    make: str,
+    model: str,
+) -> dict[str, Any]:
+    """NHTSA safety recalls and consumer complaints for a year/make/model.
+
+    Recalls are binding safety campaigns; complaints are unverified owner
+    reports that often precede a recall. Pair with `get_vehicle_info` to
+    pick up year/make/model from the VIN automatically. TSBs and open
+    investigations are not available — NHTSA's public API does not serve
+    them.
+    """
+    return await T.lookup_recalls_and_complaints(year=year, make=make, model=model)
+
+
+@mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=False,
         destructiveHint=True,

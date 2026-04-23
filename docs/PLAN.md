@@ -65,7 +65,7 @@ Purpose-built tools, not a raw command passthrough. The ergonomics differentiate
 | `read_freeze_frame(frame_index=0)` | readOnly, idempotent | Mode 02 sensor snapshot at DTC-set moment. |
 | `read_readiness_monitors()` | readOnly, idempotent | Emissions monitor completion status. Required pre-check for `clear_dtcs`. |
 | `decode_dtc(code, year?, make?, model?)` | readOnly, idempotent | Wal33D + per-make OBDb JSON for manufacturer-specific codes. |
-| `lookup_tsbs_and_recalls(year, make, model)` | readOnly, idempotent | NHTSA public API. |
+| `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA public API. (TSBs + investigations are not publicly served; see DECISIONS.) |
 | `lookup_repair_info(dtc, year, make, model)` | readOnly, idempotent | Optional passthrough to a user-configured Mechanics Sidekick endpoint. |
 | `clear_dtcs()` | destructive, requires elicitation | Runs `read_readiness_monitors` first and surfaces incomplete-monitor warning in the elicit prompt. |
 
@@ -110,7 +110,7 @@ Tools: `get_vehicle_info`, `list_supported_pids`, `read_live_data`, `read_dtcs`,
 **Acceptance:** Demo video recorded on 2025 Mustang with genuine adapter. Server live on Smithery and mcp.so. Sidekick-optional integration working.
 
 - `record_session` with `ctx.report_progress` streaming.
-- `lookup_tsbs_and_recalls` via NHTSA API.
+- `lookup_recalls_and_complaints` via NHTSA API.
 - `lookup_repair_info` — optional, wired to a user-configured Sidekick endpoint (URL in env var, absent = tool not registered).
 - Per-make manufacturer-specific PID decoding using `github.com/OBDb/*` JSON signal sets for Ford (covers 3 of 4 dev vehicles). A8 left on generic Mode 01.
 - README with installation, supported hosts, troubleshooting, demo video embed.

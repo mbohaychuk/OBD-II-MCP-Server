@@ -9,6 +9,7 @@ spins a simulator, tests call these functions directly.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -19,6 +20,7 @@ from obd.codes import BASE_TESTS, COMPRESSION_TESTS, SPARK_TESTS
 
 from obd_mcp.client import ObdClient
 from obd_mcp.dtc_db import DtcDatabase
+from obd_mcp.nhtsa import lookup_complaints, lookup_recalls
 from obd_mcp.vin import decode_vin
 
 DTC_SCOPES: frozenset[str] = frozenset({"stored", "pending", "all"})
@@ -361,5 +363,48 @@ async def clear_dtcs(client: ObdClient, confirm: ConfirmFn) -> dict[str, Any]:
         "cleared": wire_ok,
         "reason": None if wire_ok else "adapter_no_response",
         "readiness_before": readiness,
+        "timestamp": time.time(),
+    }
+
+
+async def lookup_recalls_and_complaints(
+    *,
+    year: int,
+    make: str,
+    model: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """NHTSA safety recalls and consumer complaints for a year/make/model.
+
+    Fires both endpoints in parallel; each is best-effort. If one is down
+    and the other answers, the response still carries what we got. If
+    both fail, identity fields are still populated so the LLM can surface
+    a useful "lookup unavailable" message without re-asking for inputs.
+
+    TSBs (technical service bulletins) and investigations are out of
+    scope: NHTSA does not expose either via its public API. See
+    `docs/DECISIONS.md` for the rationale behind the tool's scope.
+    """
+    owns_client = http_client is None
+    if http_client is None:
+        from obd_mcp.nhtsa import NHTSA_TIMEOUT
+
+        http_client = httpx.AsyncClient(timeout=NHTSA_TIMEOUT)
+
+    try:
+        recalls, complaints = await asyncio.gather(
+            lookup_recalls(make, model, year, client=http_client),
+            lookup_complaints(make, model, year, client=http_client),
+        )
+    finally:
+        if owns_client:
+            await http_client.aclose()
+
+    return {
+        "year": year,
+        "make": make,
+        "model": model,
+        "recalls": recalls,
+        "complaints": complaints,
         "timestamp": time.time(),
     }
