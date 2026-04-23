@@ -9,6 +9,7 @@ module directly.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -47,11 +48,29 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[AppContext]:
 
 mcp = FastMCP("obd-mcp", lifespan=lifespan)
 
+# Session store for `record_session`. Module-level because the MCP
+# resource handler for `obd://sessions/{id}.json` can't receive the
+# lifespan context — and since the FastMCP instance is a singleton per
+# server process, the lifetimes match. Sessions die with the process,
+# matching DECISIONS.md: "in-memory only, no disk persistence".
+_SESSIONS: dict[str, dict[str, Any]] = {}
+
 
 def _app(ctx: Context) -> AppContext:  # type: ignore[type-arg]
     app = ctx.request_context.lifespan_context
     assert isinstance(app, AppContext)
     return app
+
+
+@mcp.resource(
+    "obd://sessions/{session_id}.json",
+    mime_type="application/json",
+)
+async def _session_resource(session_id: str) -> str:
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        raise ValueError(f"session {session_id!r} not found")
+    return json.dumps(session)
 
 
 @mcp.tool()
@@ -146,6 +165,40 @@ class _ClearDtcsConfirmation(BaseModel):
             "emissions readiness monitors on the vehicle."
         ),
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=False),
+)
+async def record_session(
+    ctx: Context,  # type: ignore[type-arg]
+    duration_s: float,
+    pids: list[str],
+    hz_target: float = 1.0,
+) -> dict[str, Any]:
+    """Record a time-bounded sample of one or more PIDs.
+
+    Streams progress via MCP progress notifications. The full timeseries
+    is returned inline *and* saved to the server's session store; the
+    response's `resource_uri` can be fetched later via `resources/read`
+    to re-obtain the samples without re-recording.
+
+    Sessions live in memory only and are lost on server restart.
+    Bounds: `duration_s ∈ (0, 600]`, `hz_target ∈ (0, 20]`.
+    """
+
+    async def _emit(current: int, total: int) -> None:
+        await ctx.report_progress(current, total)
+
+    result = await T.record_session(
+        _app(ctx).client,
+        duration_s=duration_s,
+        pids=pids,
+        hz_target=hz_target,
+        progress=_emit,
+    )
+    _SESSIONS[result["session_id"]] = result
+    return result
 
 
 @mcp.tool(

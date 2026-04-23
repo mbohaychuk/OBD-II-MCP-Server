@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-04-23 — `record_session` storage: in-memory dict, MCP resource template
+
+**Context.** Phase 3 plan promised `record_session` returns "timeseries + resource URI for replay". Three options: in-memory only (dies with server), JSONL on disk ($XDG_DATA_HOME), inline-only no resource URI.
+**Decision.** In-memory `_SESSIONS: dict[str, dict]` on the server module. MCP resource template `obd://sessions/{session_id}.json` serves the stored payload. FastMCP's resource handlers don't receive lifespan context, so the dict is module-level (mcp server is a singleton per process — lifetimes match). No disk write, no cache eviction, no TTL.
+**Why.** Replay-within-a-session is the realistic use case — the MCP host talks to this process for the duration of a conversation. Persistence across restarts adds filesystem/permissions surface without a concrete demand. The record tool returns the full samples inline *and* populates the resource, so the LLM can choose: keep the data in tool-response context or fetch via resource URI if it's dropped its working memory.
+
 ## 2026-04-23 — OBDb Ford signal sets: bundled (CC-BY-SA-4.0), Mode 22 reads deferred
 
 **Context.** PLAN.md §6 left open "bundle vs fetch" for OBDb signal sets. OBDb repos are CC-BY-SA-4.0 (content, not software). Of the dev fleet, OBDb has Ford-Mustang and Ford-F-150 but not Ford-Edge; the A8 is out of scope.
