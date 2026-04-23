@@ -21,6 +21,7 @@ from obd.codes import BASE_TESTS, COMPRESSION_TESTS, SPARK_TESTS
 from obd_mcp.client import ObdClient
 from obd_mcp.dtc_db import DtcDatabase
 from obd_mcp.nhtsa import lookup_complaints, lookup_recalls
+from obd_mcp.obdb import load_signals
 from obd_mcp.sidekick import fetch_repair_info
 from obd_mcp.vin import decode_vin
 
@@ -407,6 +408,57 @@ async def lookup_recalls_and_complaints(
         "model": model,
         "recalls": recalls,
         "complaints": complaints,
+        "timestamp": time.time(),
+    }
+
+
+async def list_manufacturer_signals(
+    *,
+    year: int | None,
+    make: str,
+    model: str,
+) -> dict[str, Any]:
+    """Manufacturer-specific Mode 22 signals bundled for supported vehicles.
+
+    Returns the metadata (signal id, name, request PID, CAN header, unit)
+    for signals the OBDb project has catalogued for this make/model.
+    Useful context for an LLM to narrate what manufacturer-specific data
+    exists for the connected vehicle — even though obd-mcp does not
+    issue Mode 22 reads itself yet.
+
+    Unsupported make/model returns `{available: False, reason:
+    "NO_SIGNAL_SET", signals: []}` — generic Mode 01 via `read_live_data`
+    still works for those.
+    """
+    signals = load_signals(make, model, year=year)
+    if not signals:
+        return {
+            "available": False,
+            "reason": "NO_SIGNAL_SET",
+            "year": year,
+            "make": make,
+            "model": model,
+            "signals": [],
+            "timestamp": time.time(),
+        }
+    return {
+        "available": True,
+        "reason": None,
+        "year": year,
+        "make": make,
+        "model": model,
+        "signals": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "description": s.description,
+                "unit": s.unit,
+                "header": s.header,
+                "response_address": s.response_address,
+                "request_hex": s.request_hex,
+            }
+            for s in signals
+        ],
         "timestamp": time.time(),
     }
 

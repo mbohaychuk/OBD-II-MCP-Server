@@ -112,7 +112,7 @@ Tools: `get_vehicle_info`, `list_supported_pids`, `read_live_data`, `read_dtcs`,
 - `record_session` with `ctx.report_progress` streaming.
 - `lookup_recalls_and_complaints` via NHTSA API.
 - `lookup_repair_info` — optional, wired to a user-configured Sidekick endpoint (URL in env var, absent = tool not registered).
-- Per-make manufacturer-specific PID decoding using `github.com/OBDb/*` JSON signal sets for Ford (covers 3 of 4 dev vehicles). A8 left on generic Mode 01.
+- Per-make manufacturer-specific PID metadata using `github.com/OBDb/*` JSON signal sets. Bundled: Ford Mustang + F-150 (Edge has no OBDb repo, A8 out of scope). Live Mode 22 reads deferred — see DECISIONS.
 - README with installation, supported hosts, troubleshooting, demo video embed.
 - Published to PyPI, Smithery, mcp.so.
 

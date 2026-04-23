@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-04-23 — OBDb Ford signal sets: bundled (CC-BY-SA-4.0), Mode 22 reads deferred
+
+**Context.** PLAN.md §6 left open "bundle vs fetch" for OBDb signal sets. OBDb repos are CC-BY-SA-4.0 (content, not software). Of the dev fleet, OBDb has Ford-Mustang and Ford-F-150 but not Ford-Edge; the A8 is out of scope.
+**Decision.** Bundle `Ford-Mustang` and `Ford-F-150` JSONs at pinned commits under `src/obd_mcp/data/obdb/ford/`. Add a separate `LICENSE` file in that directory declaring the CC-BY-SA-4.0 obligation (attribution + share-alike on downstream modifications of the JSON). The Python code is not a derivative of the JSON — different license boundary, same pattern as a GPL dependency vs your application code. Live Mode 22 reads (send `22 XXXX`, decode per `fmt`) deferred — validating without a vehicle + genuine adapter is not safe.
+**Why.** Offline-first wins for a hardware bridge: network-required startup is a non-starter for a tool that might run without internet. Live reads need real-vehicle coverage we don't have yet; shipping metadata-only still gives LLMs useful context ("on a 2025 Mustang, LPFP duty-cycle is PID 0307") without the risk of misdecoding bytes we've never seen on the wire.
+
 ## 2026-04-23 — Sidekick `lookup_repair_info` contract: `POST /repair-lookup`, env-var gated
 
 **Context.** PLAN.md says `lookup_repair_info` is an optional tool proxying to a user-configured Mechanics Sidekick endpoint. Three contract details were open: HTTP verb/path, request body, registration behavior when the env var is absent.

@@ -1,0 +1,25 @@
+The JSON signal-set files in this directory tree (mustang.json, f-150.json,
+and any future model additions) are vendored from the OBDb project and are
+licensed under the Creative Commons Attribution-ShareAlike 4.0 International
+License (CC-BY-SA-4.0).
+
+    https://creativecommons.org/licenses/by-sa/4.0/
+
+The rest of obd-mcp is licensed separately. Only the contents of this
+directory are subject to CC-BY-SA-4.0.
+
+=== Attribution ===
+
+Source organization: OBDb (https://github.com/OBDb)
+
+Pinned content:
+  ford/mustang.json  ← OBDb/Ford-Mustang @ 2f248f25c9a35776a709fc0416420ff1b6cf520b
+  ford/f-150.json    ← OBDb/Ford-F-150   @ 8b087b81cb67171031178f341dc2a7eb02f37606
+
+Files are included verbatim. No adaptations.
+
+=== ShareAlike obligation ===
+
+If you modify the signal-set JSONs and redistribute them, the modified
+files must remain under CC-BY-SA-4.0. This does not apply to software
+that merely reads the JSONs as data (the obd-mcp Python code itself).
