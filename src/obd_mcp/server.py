@@ -151,6 +151,27 @@ class _ClearDtcsConfirmation(BaseModel):
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
 )
+async def list_manufacturer_signals(
+    ctx: Context,  # type: ignore[type-arg]  # noqa: ARG001
+    make: str,
+    model: str,
+    year: int | None = None,
+) -> dict[str, Any]:
+    """Bundled manufacturer-specific Mode 22 signal catalogue.
+
+    Returns the OBDb signal list for Ford Mustang and F-150 (the dev
+    fleet subset this release vendors). Useful for an LLM to narrate
+    what per-make data exists for the connected vehicle — even though
+    obd-mcp does not issue Mode 22 reads itself yet. Unsupported
+    vehicles return an in-band `{available: false, reason:
+    "NO_SIGNAL_SET"}`; generic Mode 01 via `read_live_data` still works.
+    """
+    return await T.list_manufacturer_signals(year=year, make=make, model=model)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
+)
 async def lookup_recalls_and_complaints(
     ctx: Context,  # type: ignore[type-arg]  # noqa: ARG001
     year: int,

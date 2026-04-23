@@ -48,6 +48,7 @@ matching the Ircama ELM327-emulator's default TCP port.
 | `read_dtcs(scope)` | readOnly, idempotent | `scope ∈ {stored, pending, all}`. Joined with the bundled Wal33D DTC DB. |
 | `read_freeze_frame(frame_index=0)` | readOnly, idempotent | Mode 02 sensor snapshot at DTC-set moment. `frame_index != 0` returns an in-band `FRAME_INDEX_NOT_SUPPORTED` (rare ECUs, deferred). |
 | `read_readiness_monitors` | readOnly, idempotent | Emissions-readiness monitor completion status. |
+| `list_manufacturer_signals(make, model, year?)` | readOnly, idempotent | Bundled OBDb Mode 22 signal catalogue (Ford Mustang + F-150 in this release). Metadata only — live Mode 22 reads deferred. |
 | `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA safety recalls + consumer complaints for the vehicle. TSBs / investigations are not publicly served by NHTSA. |
 | `lookup_repair_info(dtc, year?, make?, model?)` | readOnly, idempotent | _Optional._ Registered only when `SIDEKICK_URL` is set. Proxies to a Mechanics Sidekick RAG endpoint for repair-manual context. |
 | `clear_dtcs` | **destructive** | Mode 04 erase. Gated by MCP elicitation — prompt surfaces incomplete monitors that will be reset. |
@@ -87,3 +88,4 @@ the DTC DB and the destructive-op gating path run pure in-process.
 - [brendan-w/python-OBD](https://github.com/brendan-w/python-OBD) — ELM327 + OBD-II decoding library (pinned, see `pyproject.toml`).
 - [Ircama/ELM327-emulator](https://github.com/Ircama/ELM327-emulator) — simulator used for CI and local testing.
 - [Wal33D/dtc-database](https://github.com/Wal33D/dtc-database) — vendored DTC description database at `src/obd_mcp/data/dtc.sqlite`. MIT-licensed; see `src/obd_mcp/data/dtc.sqlite.LICENSE`.
+- [OBDb](https://github.com/OBDb) — vendored per-model Mode 22 signal sets at `src/obd_mcp/data/obdb/ford/{mustang,f-150}.json`. CC-BY-SA-4.0; attribution and pinned commits in `src/obd_mcp/data/obdb/LICENSE`.
