@@ -10,6 +10,7 @@ keywords = ["mcp", "obd-ii", "elm327", "diagnostics"]
 dependencies = [
     "mcp>=1.27.0",
     "obd @ git+https://github.com/brendan-w/python-OBD.git@a378bdd81d58c67d08050e4244173a9a7dbda73d",
+    "httpx>=0.27",
 ]
 
 [project.scripts]

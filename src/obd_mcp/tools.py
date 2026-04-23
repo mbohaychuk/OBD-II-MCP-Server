@@ -13,11 +13,13 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 import obd
 from obd.codes import BASE_TESTS, COMPRESSION_TESTS, SPARK_TESTS
 
 from obd_mcp.client import ObdClient
 from obd_mcp.dtc_db import DtcDatabase
+from obd_mcp.vin import decode_vin
 
 DTC_SCOPES: frozenset[str] = frozenset({"stored", "pending", "all"})
 
@@ -46,10 +48,21 @@ def _serialize_value(value: Any) -> Any:
     return value
 
 
-async def get_vehicle_info(client: ObdClient) -> dict[str, Any]:
+async def get_vehicle_info(
+    client: ObdClient,
+    *,
+    http_client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
     """Identity + link info for the attached vehicle.
 
     Fields that the ECU or adapter doesn't provide come back as `None`.
+    When a VIN is available, it is enriched via NHTSA vPIC into
+    `vin_decoded` (year / make / model / displacement / ...). Enrichment
+    failures are silent — `vin_decoded` is `None` and the rest of the
+    payload is unchanged.
+
+    `http_client` is test-injection; production passes `None` and we
+    spin an ephemeral client for the one lookup.
     """
     vin_resp = await client.query(obd.commands.VIN)
     calib_resp = await client.query(obd.commands.CALIBRATION_ID)
@@ -60,8 +73,14 @@ async def get_vehicle_info(client: ObdClient) -> dict[str, Any]:
     if not voltage_resp.is_null() and voltage_resp.value is not None:
         voltage = float(voltage_resp.value.magnitude)
 
+    vin_value = None if vin_resp.is_null() else _serialize_value(vin_resp.value)
+    vin_decoded: dict[str, Any] | None = None
+    if isinstance(vin_value, str) and vin_value.strip():
+        vin_decoded = await decode_vin(vin_value, client=http_client)
+
     return {
-        "vin": None if vin_resp.is_null() else _serialize_value(vin_resp.value),
+        "vin": vin_value,
+        "vin_decoded": vin_decoded,
         "calibration_ids": None if calib_resp.is_null() else _serialize_value(calib_resp.value),
         "cvn": None if cvn_resp.is_null() else _serialize_value(cvn_resp.value),
         "voltage_volts": voltage,

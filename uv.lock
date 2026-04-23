@@ -503,6 +503,7 @@ name = "obd-mcp"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "mcp" },
     { name = "obd" },
 ]
@@ -518,6 +519,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.27.0" },
     { name = "obd", git = "https://github.com/brendan-w/python-OBD.git?rev=a378bdd81d58c67d08050e4244173a9a7dbda73d" },
 ]
