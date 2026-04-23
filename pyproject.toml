@@ -1,0 +1,59 @@
+[project]
+name = "obd-mcp"
+version = "0.0.1"
+description = "MCP server bridging LLM agents to a live OBD-II port via an ELM327 adapter."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Mark Bohaychuk" }]
+keywords = ["mcp", "obd-ii", "elm327", "diagnostics"]
+dependencies = [
+    "mcp>=1.27.0",
+    "obd @ git+https://github.com/brendan-w/python-OBD.git@a378bdd81d58c67d08050e4244173a9a7dbda73d",
+]
+
+[project.scripts]
+obd-mcp = "obd_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv.extra-build-dependencies]
+elm327-emulator = ["setuptools<80"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/obd_mcp"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.9",
+    "mypy>=1.11",
+    "ELM327-emulator>=3.0.5",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/obd_mcp"]
+
+[[tool.mypy.overrides]]
+module = ["obd.*", "elm.*"]
+ignore_missing_imports = true
