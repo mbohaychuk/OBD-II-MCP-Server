@@ -2,7 +2,7 @@
 
 **Goal.** A Python MCP server that bridges any MCP host (Claude Desktop, Cursor, Mechanics Sidekick) to a live OBD-II port via an ELM327 adapter. Published to Smithery + mcp.so. Paired with a repair-knowledge RAG (Mechanics Sidekick, a separate project) for grounded diagnostic conversations.
 
-**Status.** Design locked. No code yet. Adapter on hand (WiFi clone, Amazon B06XGB4QL7). Dev fleet: 2006 Audi A8 (D3), 2015 F-150, 2019 Ford Edge, 2025 Mustang EcoBoost.
+**Status.** Phase 2 tool surface complete against the Ircama simulator. `read_freeze_frame`, NHTSA vPIC VIN enrichment, and the five-code error taxonomy are wired. Two Phase-2 items remain pending a garage session and cannot be closed from the desk: legacy-protocol validation on the 2006 A8, and the Bluetooth-classic path (F-150 or Edge over rfcomm). 61 tests green; ruff / mypy strict / stdio handshake clean. Adapter on hand (WiFi clone, Amazon B06XGB4QL7). Dev fleet: 2006 Audi A8 (D3), 2015 F-150, 2019 Ford Edge, 2025 Mustang EcoBoost.
 
 Each decision below has a rationale captured in `DECISIONS.md`. Don't re-litigate without updating that file.
 
