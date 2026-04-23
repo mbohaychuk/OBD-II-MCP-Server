@@ -12,7 +12,9 @@ import asyncio
 from types import TracebackType
 
 import obd
-from obd import OBD, OBDCommand, OBDResponse
+from obd import OBD, OBDCommand, OBDResponse, OBDStatus
+
+from obd_mcp.errors import ObdError, ObdErrorCode
 
 
 class ObdClient:
@@ -55,7 +57,28 @@ class ObdClient:
                         check_voltage=self._check_voltage,
                     ),
                 )
+            self._assert_connected(self._connection)
             return self._connection
+
+    def _assert_connected(self, conn: OBD) -> None:
+        """Map python-OBD post-connect status to the ObdError taxonomy.
+
+        python-OBD swallows pyserial exceptions and hands back a live
+        `OBD` object with a text status. We coerce that text into the
+        five-code error taxonomy the tool surface promises.
+        """
+        status = str(conn.status())
+        if status == OBDStatus.NOT_CONNECTED:
+            raise ObdError(
+                ObdErrorCode.UNABLE_TO_CONNECT,
+                f"adapter not reachable at {self._portstr}",
+            )
+        if status == OBDStatus.ELM_CONNECTED:
+            # ELM327 responded but couldn't initialize the CAN/K-line bus.
+            raise ObdError(
+                ObdErrorCode.BUS_INIT_ERROR,
+                "adapter is alive but failed to initialize the vehicle bus",
+            )
 
     async def query(self, command: OBDCommand) -> OBDResponse:
         conn = await self._get_connection()
