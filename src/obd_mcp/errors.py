@@ -8,10 +8,10 @@ key to reason over without needing a bespoke MCP structured-error shape.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ObdErrorCode(str, Enum):
+class ObdErrorCode(StrEnum):
     NO_DATA = "NO_DATA"
     BUS_INIT_ERROR = "BUS_INIT_ERROR"
     CAN_ERROR = "CAN_ERROR"

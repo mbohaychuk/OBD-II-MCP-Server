@@ -5,8 +5,10 @@ clients, …) to a live OBD-II port via an ELM327 adapter. Python, stdio
 transport, FastMCP. See `docs/PLAN.md` for roadmap and `docs/DECISIONS.md`
 for the load-bearing design choices.
 
-Status: Phase 1 (MVP) complete against the Ircama simulator; awaiting
-real-vehicle validation on the dev fleet.
+Status: Phase 2 tool surface complete against the Ircama simulator —
+freeze-frame snapshots, NHTSA vPIC VIN enrichment, and a structured
+error taxonomy. Field validation on the 2006 A8 (legacy protocols) and
+Bluetooth-classic path are still pending a garage session.
 
 ## Quick start
 
@@ -35,17 +37,34 @@ uv run obd-mcp
 If `OBD_PORT` is unset the server defaults to `socket://localhost:35000`,
 matching the Ircama ELM327-emulator's default TCP port.
 
-## Phase 1 tool surface
+## Tool surface
 
 | Tool | Annotations | Purpose |
 |---|---|---|
 | `ping` | — | Health check (returns `"pong"`). |
-| `get_vehicle_info` | readOnly, idempotent | VIN, calibration IDs, CVN, adapter voltage, protocol, link status. |
+| `get_vehicle_info` | readOnly, idempotent | VIN, calibration IDs, CVN, adapter voltage, protocol, link status. VIN (when present) is enriched via NHTSA vPIC → year/make/model/displacement. |
 | `list_supported_pids` | readOnly, idempotent | Mode 01 PIDs the ECU advertises support for. |
 | `read_live_data(pids)` | readOnly | Snapshot decode of one or more Mode 01 PIDs by name. |
 | `read_dtcs(scope)` | readOnly, idempotent | `scope ∈ {stored, pending, all}`. Joined with the bundled Wal33D DTC DB. |
+| `read_freeze_frame(frame_index=0)` | readOnly, idempotent | Mode 02 sensor snapshot at DTC-set moment. `frame_index != 0` returns an in-band `FRAME_INDEX_NOT_SUPPORTED` (rare ECUs, deferred). |
 | `read_readiness_monitors` | readOnly, idempotent | Emissions-readiness monitor completion status. |
 | `clear_dtcs` | **destructive** | Mode 04 erase. Gated by MCP elicitation — prompt surfaces incomplete monitors that will be reset. |
+
+### Error taxonomy
+
+Transport-level failures surface as an MCP tool error whose message is
+prefixed with one of:
+
+| Code | Meaning |
+|---|---|
+| `UNABLE_TO_CONNECT` | Adapter not reachable on the given port URL. |
+| `BUS_INIT_ERROR` | ELM327 is alive but could not initialize the CAN/K-line bus. |
+| `ADAPTER_TIMEOUT` | Request sent but the adapter did not respond in time. |
+| `CAN_ERROR` | Bus-level CAN error surfaced by the adapter. |
+| `NO_DATA` | No ECU responded to the request. |
+
+Per-PID `NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID` cases inside
+`read_live_data` remain in-band (they are data, not transport failures).
 
 ## Development
 

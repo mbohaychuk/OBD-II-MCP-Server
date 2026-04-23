@@ -6,6 +6,24 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-04-23 — Error taxonomy surfaces as `[CODE] message` exception string
+
+**Context.** Phase 2 promises a "structured error response, not a Python exception trace" for connection-level failures. MCP's `CallToolResult.isError=true` shape has only text content — no reserved field for an error code.
+**Decision.** Raise `ObdError(code, message)` where `str(err) == "[CODE] message"`. FastMCP forwards the exception string verbatim (no traceback). LLMs key off the `[CODE]` prefix.
+**Why.** Zero dependency on MCP SDK internals, works today, round-trips through any MCP host. Per-PID errors inside `read_live_data` stay in-band — they are data, not transport failures.
+
+## 2026-04-23 — `read_freeze_frame` supports frame_index=0 only
+
+**Context.** Mode 02 on the wire takes a frame-index byte per request (`02 <PID> <FRAME>`); python-OBD's command set only emits `02 <PID>` (implicitly frame 0).
+**Decision.** Accept `frame_index != 0` as input but return an in-band `{available: False, reason: "FRAME_INDEX_NOT_SUPPORTED"}`. No raw-command shim until a vehicle on hand requires it.
+**Why.** Multi-frame ECUs are uncommon. Building a bypass around python-OBD for a hypothetical use case violates YAGNI. In-band error is honest about the limitation without hiding it.
+
+## 2026-04-23 — VIN enrichment: NHTSA vPIC via httpx, best-effort
+
+**Context.** `get_vehicle_info` wants year/make/model. The VIN alone is not human-friendly.
+**Decision.** Add `httpx` dep. On each `get_vehicle_info` call with a VIN, hit `vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues`. Any failure → `vin_decoded: null`, rest of payload unchanged. No caching in v1.
+**Why.** vPIC is public, unauthenticated, permissively licensed government data. `httpx` is the async-native choice and already in the mcp dependency tree. Caching is premature — VIN doesn't change within a session, but neither do LLMs call this in a tight loop.
+
 ## 2026-04-22 — Hero demo vehicle: 2025 Mustang EcoBoost
 
 **Context.** Four test vehicles on hand; recorded demo needs exactly one.
