@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-04-23 — Sidekick `lookup_repair_info` contract: `POST /repair-lookup`, env-var gated
+
+**Context.** PLAN.md says `lookup_repair_info` is an optional tool proxying to a user-configured Mechanics Sidekick endpoint. Three contract details were open: HTTP verb/path, request body, registration behavior when the env var is absent.
+**Decision.** `POST {SIDEKICK_URL}/repair-lookup` with JSON body `{dtc, year, make, model}` (year/make/model nullable). Response `{summary: string?, sources: [{title, url, excerpt}]}`. If `SIDEKICK_URL` is unset, the tool is not registered at all — it doesn't appear in `tools/list`. Any Sidekick failure (network, non-200, bad JSON) collapses to `{available: false, error, summary: null, sources: []}` with the caller's context echoed back.
+**Why.** Registering a placeholder tool that always returns "not configured" wastes LLM tool-selection attention. Opt-in-by-env is the cleanest deployment posture. The response envelope mirrors `vin_decoded` / NHTSA lookup patterns: best-effort, never raises, the LLM can narrate outages.
+
 ## 2026-04-23 — Tool renamed: `lookup_tsbs_and_recalls` → `lookup_recalls_and_complaints`
 
 **Context.** Phase 3 plan named this tool `lookup_tsbs_and_recalls`. Probing NHTSA's public API showed only `/recalls/recallsByVehicle` and `/complaints/complaintsByVehicle` answer unauthenticated; `/investigations/investigationsByVehicle` and `/bulletins/*` return "Missing Authentication Token". TSB bulletins are manufacturer-copyrighted and not published via public API.
