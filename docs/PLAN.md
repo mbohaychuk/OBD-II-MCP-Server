@@ -2,7 +2,7 @@
 
 **Goal.** A Python MCP server that bridges any MCP host (Claude Desktop, Cursor, Mechanics Sidekick) to a live OBD-II port via an ELM327 adapter. Published to Smithery + mcp.so. Paired with a repair-knowledge RAG (Mechanics Sidekick, a separate project) for grounded diagnostic conversations.
 
-**Status.** Phase 2 tool surface complete against the Ircama simulator. `read_freeze_frame`, NHTSA vPIC VIN enrichment, and the five-code error taxonomy are wired. Two Phase-2 items remain pending a garage session and cannot be closed from the desk: legacy-protocol validation on the 2006 A8, and the Bluetooth-classic path (F-150 or Edge over rfcomm). 61 tests green; ruff / mypy strict / stdio handshake clean. Adapter on hand (WiFi clone, Amazon B06XGB4QL7). Dev fleet: 2006 Audi A8 (D3), 2015 F-150, 2019 Ford Edge, 2025 Mustang EcoBoost.
+**Status.** Phase 3 tool surface complete against the Ircama simulator. Four new tools on top of Phase 2: `record_session` (with MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), `lookup_recalls_and_complaints` (NHTSA public API), and the optional env-gated `lookup_repair_info` (Sidekick passthrough). PyPI metadata + build pipeline prepped; release blocked by python-OBD's git-URL pin (see `docs/RELEASE.md`). 104 tests green; ruff / mypy strict / stdio handshake clean. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path.
 
 Each decision below has a rationale captured in `DECISIONS.md`. Don't re-litigate without updating that file.
 
