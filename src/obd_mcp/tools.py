@@ -184,6 +184,74 @@ async def read_dtcs(
     }
 
 
+async def read_freeze_frame(client: ObdClient, frame_index: int = 0) -> dict[str, Any]:
+    """Mode 02 snapshot of the sensor state when a DTC was captured.
+
+    Returns `{available, reason, dtc, frame, timestamp}`. `dtc` is `{code,
+    description}` identifying which trouble code triggered the capture;
+    `frame` is a dict of `{pid_name: {value, unit}}` for every freeze-
+    frame PID the ECU reports. When no DTC is stored the ECU returns a
+    null DTC and we surface `available=False`, `reason="NO_FREEZE_FRAME"`.
+
+    python-OBD does not append a frame-index byte to Mode 02 requests, so
+    only `frame_index=0` (the most recent frame) is reachable via the
+    standard command set. Non-zero indices are rejected in-band rather
+    than silently falling back — ECUs that store multiple freeze frames
+    are uncommon and need raw-command support (future work).
+    """
+    if frame_index != 0:
+        return {
+            "available": False,
+            "reason": "FRAME_INDEX_NOT_SUPPORTED",
+            "dtc": None,
+            "frame": {},
+            "frame_index": frame_index,
+            "timestamp": time.time(),
+        }
+
+    dtc_resp = await client.query(obd.commands.DTC_FREEZE_DTC)
+    if dtc_resp.is_null() or dtc_resp.value is None:
+        return {
+            "available": False,
+            "reason": "NO_FREEZE_FRAME",
+            "dtc": None,
+            "frame": {},
+            "frame_index": 0,
+            "timestamp": time.time(),
+        }
+
+    code, wire_desc = dtc_resp.value
+
+    readings: dict[str, dict[str, Any]] = {}
+    for cmd in obd.commands.modes[2]:
+        if cmd is None:
+            continue
+        if cmd.name == "DTC_FREEZE_DTC" or cmd.name.startswith("DTC_PIDS_"):
+            continue
+        if not await client.supports(cmd):
+            continue
+        resp = await client.query(cmd)
+        if resp.is_null():
+            continue
+        serialized = _serialize_value(resp.value)
+        if isinstance(serialized, dict) and "magnitude" in serialized and "unit" in serialized:
+            readings[cmd.name] = {
+                "value": serialized["magnitude"],
+                "unit": serialized["unit"],
+            }
+        else:
+            readings[cmd.name] = {"value": serialized, "unit": None}
+
+    return {
+        "available": True,
+        "reason": None,
+        "dtc": {"code": code, "description": wire_desc},
+        "frame": readings,
+        "frame_index": 0,
+        "timestamp": time.time(),
+    }
+
+
 async def read_readiness_monitors(client: ObdClient) -> dict[str, Any]:
     """Emissions-readiness monitors from Mode 01 PID 01 (STATUS).
 

@@ -9,13 +9,14 @@ import pytest
 
 from obd_mcp.server import mcp
 
-PHASE_1_TOOLS: frozenset[str] = frozenset(
+EXPECTED_TOOLS: frozenset[str] = frozenset(
     {
         "ping",
         "get_vehicle_info",
         "list_supported_pids",
         "read_live_data",
         "read_dtcs",
+        "read_freeze_frame",
         "read_readiness_monitors",
         "clear_dtcs",
     }
@@ -23,10 +24,10 @@ PHASE_1_TOOLS: frozenset[str] = frozenset(
 
 
 @pytest.mark.asyncio
-async def test_all_phase_1_tools_are_registered() -> None:
+async def test_all_expected_tools_are_registered() -> None:
     tools = await mcp.list_tools()
     names = {t.name for t in tools}
-    missing = PHASE_1_TOOLS - names
+    missing = EXPECTED_TOOLS - names
     assert not missing, f"tools missing from FastMCP registry: {missing}"
 
 
@@ -48,6 +49,7 @@ async def test_read_tools_are_marked_read_only() -> None:
         "list_supported_pids",
         "read_live_data",
         "read_dtcs",
+        "read_freeze_frame",
         "read_readiness_monitors",
     ):
         ann = by_name[name].annotations

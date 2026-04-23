@@ -112,6 +112,22 @@ async def read_dtcs(
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
 )
+async def read_freeze_frame(
+    ctx: Context,  # type: ignore[type-arg]
+    frame_index: int = 0,
+) -> dict[str, Any]:
+    """Mode 02 snapshot of sensor state at the moment a DTC was set.
+
+    Pair with `read_dtcs` to explain what the engine was doing when a code
+    triggered: RPM, speed, coolant temp, fuel trims, etc. Only `frame_index=0`
+    (most recent frame) is supported in this release.
+    """
+    return await T.read_freeze_frame(_app(ctx).client, frame_index=frame_index)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
+)
 async def read_readiness_monitors(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
     """Emissions-readiness monitor completion status.
 
