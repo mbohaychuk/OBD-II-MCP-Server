@@ -3,15 +3,48 @@ name = "obd-mcp"
 version = "0.0.1"
 description = "MCP server bridging LLM agents to a live OBD-II port via an ELM327 adapter."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
-authors = [{ name = "Mark Bohaychuk" }]
-keywords = ["mcp", "obd-ii", "elm327", "diagnostics"]
+authors = [{ name = "Mark Bohaychuk", email = "mark@bohaychuk.com" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "obd-ii",
+    "obd2",
+    "elm327",
+    "automotive",
+    "diagnostics",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Hardware",
+    "Typing :: Typed",
+]
 dependencies = [
     "mcp>=1.27.0",
     "obd @ git+https://github.com/brendan-w/python-OBD.git@a378bdd81d58c67d08050e4244173a9a7dbda73d",
     "httpx>=0.27",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mbohaychuk/OBD-II-MCP-Server"
+Repository = "https://github.com/mbohaychuk/OBD-II-MCP-Server"
+Issues = "https://github.com/mbohaychuk/OBD-II-MCP-Server/issues"
+Changelog = "https://github.com/mbohaychuk/OBD-II-MCP-Server/blob/main/docs/DECISIONS.md"
 
 [project.scripts]
 obd-mcp = "obd_mcp.server:main"
