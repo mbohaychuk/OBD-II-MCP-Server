@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -27,9 +28,19 @@ from obd_mcp.vin import decode_vin
 
 DTC_SCOPES: frozenset[str] = frozenset({"stored", "pending", "all"})
 
+# Bounds for record_session. Capped generously to keep per-call response
+# payloads tractable; the LLM can chain calls if a longer recording is
+# desired.
+RECORD_MAX_DURATION_S: float = 600.0
+RECORD_MAX_HZ: float = 20.0
+
 # confirmer for destructive tools: receives the human-readable warning and the
 # list of incomplete monitor names; returns True iff the user/agent approves.
 ConfirmFn = Callable[[str, list[str]], Awaitable[bool]]
+
+# Progress callback for long-running tools. Current and total are sample
+# counts (not bytes or percentage) so the host can compute its own % label.
+ProgressFn = Callable[[int, int], Awaitable[None]]
 
 
 def _serialize_value(value: Any) -> Any:
@@ -366,6 +377,74 @@ async def clear_dtcs(client: ObdClient, confirm: ConfirmFn) -> dict[str, Any]:
         "reason": None if wire_ok else "adapter_no_response",
         "readiness_before": readiness,
         "timestamp": time.time(),
+    }
+
+
+async def record_session(
+    client: ObdClient,
+    duration_s: float,
+    pids: list[str],
+    hz_target: float,
+    *,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    """Time-bounded PID sampling, returning a dense timeseries.
+
+    Samples each PID in `pids` at `hz_target` samples/second for
+    `duration_s` seconds. If the underlying read loop is slower than the
+    target rate (slow adapter, many PIDs), the actual sample count will
+    be lower — we never stack delays to catch up. Per-sample readings use
+    the same shape as `read_live_data`, so in-band errors (NOT_SUPPORTED,
+    NO_DATA) flow through unchanged.
+
+    `progress`, when supplied, is invoked after each sample with
+    `(current, total)` — `total` is the target sample count based on
+    hz × duration, not a guarantee.
+
+    Returns `{session_id, resource_uri, duration_s, hz_target, pids,
+    samples_count, samples, started_at}`. The caller is expected to
+    stash this under `server._SESSIONS[session_id]` so the MCP resource
+    at `resource_uri` can serve it back.
+    """
+    if duration_s <= 0 or duration_s > RECORD_MAX_DURATION_S:
+        raise ValueError(f"duration_s must be in (0, {RECORD_MAX_DURATION_S}], got {duration_s}")
+    if hz_target <= 0 or hz_target > RECORD_MAX_HZ:
+        raise ValueError(f"hz_target must be in (0, {RECORD_MAX_HZ}], got {hz_target}")
+    if not pids:
+        raise ValueError("pids must contain at least one PID name")
+
+    unknown = [p for p in pids if not obd.commands.has_name(p)]
+    if unknown:
+        raise ValueError(f"unknown PID name(s): {', '.join(unknown)}")
+
+    session_id = uuid.uuid4().hex[:12]
+    interval = 1.0 / hz_target
+    started_at = time.time()
+    deadline = started_at + duration_s
+    target_count = max(1, int(round(duration_s * hz_target)))
+    samples: list[dict[str, Any]] = []
+
+    next_t = started_at
+    while time.time() < deadline:
+        wait = next_t - time.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        readings = await read_live_data(client, pids)
+        now = time.time()
+        samples.append({"t": now - started_at, "readings": readings})
+        if progress is not None:
+            await progress(len(samples), target_count)
+        next_t = max(next_t + interval, now)
+
+    return {
+        "session_id": session_id,
+        "resource_uri": f"obd://sessions/{session_id}.json",
+        "duration_s": duration_s,
+        "hz_target": hz_target,
+        "pids": pids,
+        "samples_count": len(samples),
+        "samples": samples,
+        "started_at": started_at,
     }
 
 

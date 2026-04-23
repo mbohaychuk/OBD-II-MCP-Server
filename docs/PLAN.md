@@ -109,7 +109,7 @@ Tools: `get_vehicle_info`, `list_supported_pids`, `read_live_data`, `read_dtcs`,
 
 **Acceptance:** Demo video recorded on 2025 Mustang with genuine adapter. Server live on Smithery and mcp.so. Sidekick-optional integration working.
 
-- `record_session` with `ctx.report_progress` streaming.
+- `record_session` with `ctx.report_progress` streaming. Timeseries exposed via MCP resource `obd://sessions/{id}.json` (in-memory store; dies with server).
 - `lookup_recalls_and_complaints` via NHTSA API.
 - `lookup_repair_info` — optional, wired to a user-configured Sidekick endpoint (URL in env var, absent = tool not registered).
 - Per-make manufacturer-specific PID metadata using `github.com/OBDb/*` JSON signal sets. Bundled: Ford Mustang + F-150 (Edge has no OBDb repo, A8 out of scope). Live Mode 22 reads deferred — see DECISIONS.

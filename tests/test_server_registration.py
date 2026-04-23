@@ -18,6 +18,7 @@ EXPECTED_TOOLS: frozenset[str] = frozenset(
         "read_dtcs",
         "read_freeze_frame",
         "read_readiness_monitors",
+        "record_session",
         "list_manufacturer_signals",
         "lookup_recalls_and_complaints",
         "clear_dtcs",
@@ -53,6 +54,7 @@ async def test_read_tools_are_marked_read_only() -> None:
         "read_dtcs",
         "read_freeze_frame",
         "read_readiness_monitors",
+        "record_session",
         "list_manufacturer_signals",
         "lookup_recalls_and_complaints",
     ):
