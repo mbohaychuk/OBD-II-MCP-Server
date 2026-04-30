@@ -33,6 +33,10 @@ coverage.xml
 *.swo
 .DS_Store
 
+# Local agent / assistant config
+CLAUDE.md
+.claude/
+
 # Simulator / adapter debug dumps
 *.log
 *.log.*
