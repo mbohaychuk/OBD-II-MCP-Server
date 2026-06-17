@@ -9,9 +9,42 @@ from __future__ import annotations
 
 import obd
 import pytest
+from obd import OBDStatus
 
 from obd_mcp.client import ObdClient
 from obd_mcp.errors import ObdError, ObdErrorCode
+
+
+class _FakeStatusConn:
+    """Stub connection reporting a fixed python-OBD status string, so the
+    status → ObdError mapping is exercised without a real adapter."""
+
+    def __init__(self, status: str) -> None:
+        self._status = status
+
+    def status(self) -> str:
+        return self._status
+
+
+def test_assert_connected_maps_elm_connected_to_bus_init_error() -> None:
+    """ELM alive but bus dead → BUS_INIT_ERROR. The most likely real-world
+    failure on a cheap clone, otherwise only reachable with hardware."""
+    client = ObdClient(portstr="socket://unused")
+    with pytest.raises(ObdError) as exc_info:
+        client._assert_connected(_FakeStatusConn(OBDStatus.ELM_CONNECTED))  # type: ignore[arg-type]
+    assert exc_info.value.code is ObdErrorCode.BUS_INIT_ERROR
+
+
+def test_assert_connected_maps_not_connected_to_unable_to_connect() -> None:
+    client = ObdClient(portstr="socket://unused")
+    with pytest.raises(ObdError) as exc_info:
+        client._assert_connected(_FakeStatusConn(OBDStatus.NOT_CONNECTED))  # type: ignore[arg-type]
+    assert exc_info.value.code is ObdErrorCode.UNABLE_TO_CONNECT
+
+
+def test_assert_connected_passes_when_car_connected() -> None:
+    client = ObdClient(portstr="socket://unused")
+    client._assert_connected(_FakeStatusConn(OBDStatus.CAR_CONNECTED))  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
