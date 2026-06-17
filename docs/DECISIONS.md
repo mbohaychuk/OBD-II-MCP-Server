@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-06-16 — python-OBD dependency: PyPI `obd==0.7.3`, not the git-URL pin
+
+**Context.** `pyproject.toml` pinned `obd @ git+...@a378bdd8`; PyPI rejects direct-URL dependencies, which `RELEASE.md` framed as a release blocker needing either an upstream PyPI release or vendoring (the 2026-04-22 fallback). An audit found the awaited release already exists: commit `a378bdd8` is byte-identical to python-OBD's `v0.7.3` tag (GitHub compare: identical, 0 ahead/0 behind), and `obd 0.7.3` was published to PyPI on 2025-04-07, minutes after the commit.
+**Decision.** Depend on `obd==0.7.3` from PyPI (exact pin, preserving the frozen-behaviour intent of the commit pin) and drop the hatch `allow-direct-references`. Do not vendor or fork. The built wheel's `Requires-Dist` is now a plain PyPI specifier with no direct URL, and the full suite passes unchanged against the PyPI artifact.
+**Why.** The maintainer-absent risk that justified pinning a commit is fully covered by an immutable PyPI release of the same bits, at zero cost. Vendoring takes on GPLv2 bundling and permanent maintenance for no benefit when `0.7.3` is one specifier away. This keeps the standard `pip install obd-mcp` path that the Smithery / mcp.so listings point at, and closes the `RELEASE.md` §0 blocker. Supersedes the "vendor as fallback" half of the 2026-04-22 python-OBD pin decision.
+
 ## 2026-06-16 — Error taxonomy pruned to reachable codes; timeout/CAN deferred
 
 **Context.** The 2026-04-23 error-taxonomy entry promised five `[CODE]`-prefixed transport errors. An audit found only `UNABLE_TO_CONNECT` and `BUS_INIT_ERROR` are ever raised: python-OBD swallows adapter timeouts and CAN faults into a null `OBDResponse` rather than an exception, so `ADAPTER_TIMEOUT`, `CAN_ERROR`, and a transport-level `NO_DATA` were unreachable dead codes that the README and PLAN advertised to the LLM as real behavior.

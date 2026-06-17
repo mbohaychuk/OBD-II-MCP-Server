@@ -24,7 +24,7 @@ doc is the operational checklist.
    elm -n 35000 &      # Ircama emulator
    uv run obd-mcp      # sanity check it starts
    ```
-4. Start Claude Desktop, confirm all 12 tools appear in the tool picker (11 + Sidekick if configured).
+4. Start Claude Desktop, confirm all 11 tools appear in the tool picker (12 if `SIDEKICK_URL` is configured, adding `lookup_repair_info`).
 5. `clear_dtcs` dry-run against simulator — confirm elicitation dialog renders.
 6. Swap `OBD_PORT` to the vehicle adapter's URL in `mcp.json`. Restart Claude Desktop.
 7. Plug adapter into Mustang OBD port. Key to position II (engine off is fine for most of the flow; start engine only for live-data segments if needed).

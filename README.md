@@ -7,10 +7,11 @@ clients, …) to a live OBD-II port via an ELM327 adapter. Python, stdio
 transport, FastMCP. See `docs/PLAN.md` for roadmap and `docs/DECISIONS.md`
 for the load-bearing design choices.
 
-Status: Phase 3 tool surface complete against the Ircama simulator —
-12 tools including `record_session` (with MCP resource replay),
-`list_manufacturer_signals` (bundled OBDb Ford signal sets), NHTSA
-recalls/complaints, and an optional Sidekick repair-info passthrough.
+Status: Phase 3 tool surface complete against the Ircama simulator and
+hardened (v0.1.0, 117 tests, CI). 11 tools — `record_session` (with MCP
+resource replay), `list_manufacturer_signals` (bundled OBDb Ford signal
+sets), NHTSA recalls/complaints — plus an optional Sidekick repair-info
+passthrough (the 12th tool, registered only when `SIDEKICK_URL` is set).
 Field validation on the 2006 A8 (legacy protocols) and Bluetooth-classic
 path still pending a garage session. Demo video: TBD (recording on the
 2025 Mustang EcoBoost once the OBDLink CX adapter arrives).

@@ -4,27 +4,17 @@ obd-mcp ships through three surfaces, in this order: **PyPI** (source of
 truth for the Python package), then **Smithery** and **mcp.so** (registry
 index entries that point at the PyPI package).
 
-## 0. Known blocker before 1.0 on PyPI
+## 0. PyPI dependency blocker — RESOLVED (2026-06-16)
 
-`pyproject.toml` currently pins python-OBD via a direct git URL
-(`obd @ git+https://github.com/brendan-w/python-OBD.git@a378bdd8…`) —
-PyPI rejects uploads that carry direct URL dependencies. Upload will fail
-with `400 Bad Request: Invalid requirement: '…; direct URLs are not
-allowed'.`
+`pyproject.toml` previously pinned python-OBD via a direct git URL, which
+PyPI rejects on upload. This is resolved: the pinned commit `a378bdd8` is
+byte-identical to python-OBD's `v0.7.3` tag, and `obd 0.7.3` has been on
+PyPI since 2025-04-07, so the dependency is now `obd==0.7.3` — a plain,
+PyPI-valid specifier with identical behavior. The built wheel's
+`Requires-Dist` carries no direct URL (verified). See the 2026-06-16
+DECISIONS entry for the evidence.
 
-Two paths to unblock:
-
-1. **Wait for brendan-w/python-OBD to cut a PyPI release** carrying the
-   commit we're pinned to (`a378bdd8…`). Track
-   <https://github.com/brendan-w/python-OBD/releases>. Then change the
-   dependency to `obd>=0.7.X` in `pyproject.toml`.
-2. **Vendor python-OBD** under `third_party/obd/` and drop the dependency.
-   See `docs/DECISIONS.md` (the pin-vs-vendor entry); this is already
-   the documented fallback.
-
-Do not attempt PyPI publication until one of these is resolved. Smithery
-and mcp.so listings can still be prepared behind the scenes — they won't
-be published until there's a working PyPI package for them to point at.
+Nothing blocks PyPI publication now; the steps below are the runbook.
 
 ## 1. Pre-flight
 
