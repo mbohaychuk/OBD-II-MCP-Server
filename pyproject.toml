@@ -53,11 +53,26 @@ obd-mcp = "obd_mcp.server:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/obd_mcp"]
+
+# ELM327-emulator (dev/test simulator only) needs setuptools to build its sdist.
 [tool.uv.extra-build-dependencies]
 elm327-emulator = ["setuptools<80"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/obd_mcp"]
+# ELM327-emulator's 3.0.5 sdist self-reports version `3.0.5.post2` (setuptools-scm),
+# which mismatches the `3.0.5` release version, so uv refuses to build it on a clean
+# install (fails CI / fresh clones). Declaring the metadata statically lets uv trust
+# `3.0.5` and skip the build-to-verify step. Dev-only — not in the published package.
+[[tool.uv.dependency-metadata]]
+name = "elm327-emulator"
+version = "3.0.5"
+requires-dist = [
+    "python-daemon",
+    "pyyaml",
+    "obd",
+    'pyreadline3; platform_system == "Windows" and python_version < "3.13"',
+]
 
 [dependency-groups]
 dev = [
