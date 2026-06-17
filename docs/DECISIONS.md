@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-06-16 — Error taxonomy pruned to reachable codes; timeout/CAN deferred
+
+**Context.** The 2026-04-23 error-taxonomy entry promised five `[CODE]`-prefixed transport errors. An audit found only `UNABLE_TO_CONNECT` and `BUS_INIT_ERROR` are ever raised: python-OBD swallows adapter timeouts and CAN faults into a null `OBDResponse` rather than an exception, so `ADAPTER_TIMEOUT`, `CAN_ERROR`, and a transport-level `NO_DATA` were unreachable dead codes that the README and PLAN advertised to the LLM as real behavior.
+**Decision.** Reduce `ObdErrorCode` to the two reachable connection-level codes. Keep `NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID` as in-band per-PID markers (plain strings in `read_live_data`), documented separately as data. Defer real adapter-timeout / CAN-error mapping until it can be detected from raw ELM327 reply tokens and validated against a custom Ircama scenario plus real hardware.
+**Why.** Advertising error codes the code cannot produce is a silent lie to the LLM (and the user) — the same reasoning as the 2026-04-23 `lookup_tsbs_and_recalls` → `lookup_recalls_and_complaints` rename. Honest-now beats aspirational; the richer mapping returns as a hardware-gated task, not a permanently-broken promise. This reverses the five-code surface of the 2026-04-23 entry; the `[CODE]`-prefix mechanism itself is unchanged.
+
 ## 2026-04-23 — `record_session` storage: in-memory dict, MCP resource template
 
 **Context.** Phase 3 plan promised `record_session` returns "timeseries + resource URI for replay". Three options: in-memory only (dies with server), JSONL on disk ($XDG_DATA_HOME), inline-only no resource URI.

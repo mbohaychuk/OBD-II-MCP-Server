@@ -76,19 +76,26 @@ is optional — see **Configuration** below.
 
 ### Error taxonomy
 
-Transport-level failures surface as an MCP tool error whose message is
+Connection-level failures surface as an MCP tool error whose message is
 prefixed with one of:
 
 | Code | Meaning |
 |---|---|
 | `UNABLE_TO_CONNECT` | Adapter not reachable on the given port URL. |
 | `BUS_INIT_ERROR` | ELM327 is alive but could not initialize the CAN/K-line bus. |
-| `ADAPTER_TIMEOUT` | Request sent but the adapter did not respond in time. |
-| `CAN_ERROR` | Bus-level CAN error surfaced by the adapter. |
-| `NO_DATA` | No ECU responded to the request. |
 
-Per-PID `NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID` cases inside
-`read_live_data` remain in-band (they are data, not transport failures).
+Everything else is reported **in-band** as data, not a transport error.
+Inside `read_live_data`, each requested PID carries its own outcome:
+
+| Marker | Meaning |
+|---|---|
+| `NO_DATA` | The ECU returned nothing for that PID. |
+| `NOT_SUPPORTED` | The ECU does not advertise support for that PID. |
+| `UNKNOWN_PID` | The requested name is not a known OBD-II PID. |
+
+Richer connection-error codes — adapter timeout, bus-level CAN error —
+are deferred until they can be detected from raw ELM327 reply tokens and
+validated on real hardware (see `docs/DECISIONS.md`).
 
 ## Troubleshooting
 
@@ -102,8 +109,8 @@ Per-PID `NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID` cases inside
 - Very cheap clones may need `OBD_PORT` protocol forced; not exposed yet (file an issue if you hit this).
 - 2006-era vehicles may be K-line only; legacy protocols not yet validated.
 
-**`ADAPTER_TIMEOUT`** — the adapter accepted the request but didn't reply in time.
-- Clone adapters add 100–300ms per query. If you see this during `record_session`, lower `hz_target`.
+**Slow or missing readings (`NO_DATA` from a cheap clone)** — an adapter that handshakes fine can still be too slow to answer every query.
+- Clone adapters add 100–300ms per query. During `record_session`, lower `hz_target`.
 - USB cables under 1m work best; long cables + clones are a common cause.
 
 **`clear_dtcs` elicitation doesn't appear** — the MCP host may not support elicitation.

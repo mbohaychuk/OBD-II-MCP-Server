@@ -101,7 +101,7 @@ Tools: `get_vehicle_info`, `list_supported_pids`, `read_live_data`, `read_dtcs`,
 - `read_freeze_frame`, `read_readiness_monitors`.
 - Full Mode 01 PID coverage (populate from `list_supported_pids` result).
 - NHTSA vPIC VIN-enrichment in `get_vehicle_info`.
-- Error taxonomy: `NO_DATA`, `BUS_INIT_ERROR`, `CAN_ERROR`, `UNABLE_TO_CONNECT`, `ADAPTER_TIMEOUT` — each a structured MCP error response, not a Python exception trace.
+- Error taxonomy: connection-level failures (`UNABLE_TO_CONNECT`, `BUS_INIT_ERROR`) surface as a structured `[CODE]`-prefixed MCP error, not a Python trace. Per-PID outcomes (`NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID`) stay in-band as data. Adapter-timeout / CAN-error codes deferred until hardware-validated (see DECISIONS).
 - 2006 A8 validation pass. Document any module that needs a custom header.
 - Bluetooth-classic path validated (F-150 or Edge, whichever pairs most easily with the dev laptop).
 

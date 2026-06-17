@@ -12,13 +12,14 @@ import pytest
 from obd_mcp.errors import ObdError, ObdErrorCode
 
 
-def test_all_five_codes_are_defined() -> None:
+def test_only_reachable_codes_are_defined() -> None:
+    # The enum carries exactly the connection-level codes ObdClient can
+    # actually raise. Timeout / CAN-error codes are deferred (see
+    # DECISIONS.md); the per-PID NO_DATA / NOT_SUPPORTED / UNKNOWN_PID
+    # markers are in-band strings in read_live_data, not raised here.
     assert {c.value for c in ObdErrorCode} == {
-        "NO_DATA",
-        "BUS_INIT_ERROR",
-        "CAN_ERROR",
         "UNABLE_TO_CONNECT",
-        "ADAPTER_TIMEOUT",
+        "BUS_INIT_ERROR",
     }
 
 
@@ -36,5 +37,5 @@ def test_obderror_str_has_prefix_for_llm_parsing() -> None:
 
 def test_obderror_is_raiseable_and_catchable() -> None:
     with pytest.raises(ObdError) as exc_info:
-        raise ObdError(ObdErrorCode.NO_DATA, "empty")
-    assert exc_info.value.code is ObdErrorCode.NO_DATA
+        raise ObdError(ObdErrorCode.UNABLE_TO_CONNECT, "port refused")
+    assert exc_info.value.code is ObdErrorCode.UNABLE_TO_CONNECT
