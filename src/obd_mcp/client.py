@@ -44,6 +44,7 @@ class ObdClient:
         self._check_voltage = check_voltage
         self._fast = fast
         self._transport = transport if transport is not None else resolve_transport(portstr)
+        self._transport_open = False
         self._connection: OBD | None = None
         self._conn_lock = asyncio.Lock()
         self._io_lock = asyncio.Lock()
@@ -51,7 +52,13 @@ class ObdClient:
     async def _get_connection(self) -> OBD:
         async with self._conn_lock:
             if self._connection is None or not self._connection.is_connected():
+                # Pair each transport.open() with a preceding close(): tear down
+                # any prior connection + bridge first, so a stateful transport
+                # (e.g. a BLE bridge) never has two live opens — even if a prior
+                # connect failed after open() returned.
+                await self._teardown_locked()
                 resolved = await self._transport.open()
+                self._transport_open = True
                 loop = asyncio.get_running_loop()
                 self._connection = await loop.run_in_executor(
                     None,
@@ -65,6 +72,25 @@ class ObdClient:
                 )
             self._assert_connected(self._connection)
             return self._connection
+
+    async def _teardown_locked(self) -> None:
+        """Close the live OBD connection (if any) and the transport bridge.
+
+        Caller holds `_conn_lock`. The OBD close runs under `_io_lock` so it
+        can't race an in-flight query() on the same port (conn → io order,
+        deadlock-free: query() never takes _conn_lock while holding _io_lock).
+        The transport is closed only if it was opened, so this is a safe no-op
+        before the first connect and on a repeated close.
+        """
+        if self._connection is not None:
+            conn = self._connection
+            self._connection = None
+            async with self._io_lock:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, conn.close)
+        if self._transport_open:
+            self._transport_open = False
+            await self._transport.close()
 
     def _assert_connected(self, conn: OBD) -> None:
         """Map python-OBD post-connect status to the ObdError taxonomy.
@@ -121,17 +147,7 @@ class ObdClient:
 
     async def close(self) -> None:
         async with self._conn_lock:
-            if self._connection is not None:
-                conn = self._connection
-                self._connection = None
-                # Hold _io_lock so teardown can't run conn.close() concurrently
-                # with an in-flight query() on the same serial port. query()
-                # never holds _conn_lock while holding _io_lock, so this ordering
-                # (conn → io) cannot deadlock.
-                async with self._io_lock:
-                    loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, conn.close)
-            await self._transport.close()
+            await self._teardown_locked()
 
     async def __aenter__(self) -> ObdClient:
         return self

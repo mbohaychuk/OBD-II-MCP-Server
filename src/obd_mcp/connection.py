@@ -12,14 +12,27 @@ from __future__ import annotations
 
 
 class Transport:
-    """Resolves OBD_PORT to a python-OBD portstr, owning any bridge it starts."""
+    """Resolves OBD_PORT to a python-OBD portstr, owning any bridge it starts.
+
+    Lifecycle contract for bridge-owning backends (e.g. a future BLE
+    transport): ObdClient tears the transport down before every (re)connect, so
+    each `open()` is preceded by a `close()` of the previous open — a backend
+    must never end up with two live bridges. `close()` must be safe in every
+    state: after `open()` returned, after `open()` raised partway (the backend
+    must unwind partial state so a later close fully reclaims it), and when
+    `open()` was never called.
+    """
 
     async def open(self) -> str:
-        """Return a portstr python-OBD can open; start any managed bridge."""
+        """Return a portstr python-OBD can open; (re)start any managed bridge.
+
+        May raise (peripheral not found, bridge spawn failed); on raising it
+        must leave nothing half-open that a later `close()` can't reclaim.
+        """
         raise NotImplementedError
 
     async def close(self) -> None:
-        """Tear down any managed bridge. Safe to call when nothing was opened."""
+        """Tear down any managed bridge. Idempotent and safe in every state."""
         return None
 
 
