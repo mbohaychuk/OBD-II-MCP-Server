@@ -1,5 +1,7 @@
 # obd-mcp
 
+[![CI](https://github.com/mbohaychuk/OBD-II-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/mbohaychuk/OBD-II-MCP-Server/actions/workflows/ci.yml)
+
 An MCP server that bridges any MCP host (Claude Desktop, Cursor, agentic
 clients, …) to a live OBD-II port via an ELM327 adapter. Python, stdio
 transport, FastMCP. See `docs/PLAN.md` for roadmap and `docs/DECISIONS.md`
