@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-06-17 — Connection transport seam; BLE backend deferred to hardware validation
+
+**Context.** Connecting a real adapter (Vgate iCar Pro, BLE + WiFi) exposed that `OBD_PORT` setup is painful: a WiFi AP steals the laptop's internet, classic Bluetooth needs a manual `rfcomm bind`, and BLE needs an external `ble-serial` bridge to a pseudo-terminal. python-OBD only opens serial / `socket://` URLs; BLE (GATT, no serial profile) can't be handed to it directly. We want obd-mcp to own the connection so setup is "turn the adapter on", with adapter auto-detection later.
+**Decision.** Introduce a `Transport` seam in `connection.py`: `resolve_transport(OBD_PORT) -> Transport`, where `Transport.open()` returns a python-OBD portstr and owns any bridge it starts. Today everything resolves to `PassthroughTransport` (socket:// and device paths are opened by python-OBD unchanged); `ObdClient` opens through the transport and tears it down on `close()`. A `ble://` backend (bleak → PTY bridge) and an `auto` probe loop then become additive changes to `resolve_transport` alone. The BLE backend itself is NOT built yet — BLE ELM327 GATT service/characteristic UUIDs and write semantics vary per adapter, so they must be discovered and validated against the real iCar Pro, not guessed.
+**Why.** The seam is the reusable foundation; building it now (passthrough only) is fully testable and keeps `ObdClient` untouched when BLE / auto-detect land. Deferring the BLE backend to a hardware session matches the project's rule against shipping hardware code we can't validate (cf. deferred Mode 22 reads, freeze-frame index). The new `bleak` dependency arrives with the BLE backend, not now.
+
 ## 2026-06-16 — python-OBD dependency: PyPI `obd==0.7.3`, not the git-URL pin
 
 **Context.** `pyproject.toml` pinned `obd @ git+...@a378bdd8`; PyPI rejects direct-URL dependencies, which `RELEASE.md` framed as a release blocker needing either an upstream PyPI release or vendoring (the 2026-04-22 fallback). An audit found the awaited release already exists: commit `a378bdd8` is byte-identical to python-OBD's `v0.7.3` tag (GitHub compare: identical, 0 ahead/0 behind), and `obd 0.7.3` was published to PyPI on 2025-04-07, minutes after the commit.
