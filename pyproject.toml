@@ -56,23 +56,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/obd_mcp"]
 
-# ELM327-emulator (dev/test simulator only) needs setuptools to build its sdist.
+# ELM327-emulator (dev/test simulator, git source) builds via setuptools-scm and
+# needs setuptools available in the build environment.
 [tool.uv.extra-build-dependencies]
 elm327-emulator = ["setuptools<80"]
-
-# ELM327-emulator's 3.0.5 sdist self-reports version `3.0.5.post2` (setuptools-scm),
-# which mismatches the `3.0.5` release version, so uv refuses to build it on a clean
-# install (fails CI / fresh clones). Declaring the metadata statically lets uv trust
-# `3.0.5` and skip the build-to-verify step. Dev-only — not in the published package.
-[[tool.uv.dependency-metadata]]
-name = "elm327-emulator"
-version = "3.0.5"
-requires-dist = [
-    "python-daemon",
-    "pyyaml",
-    "obd",
-    'pyreadline3; platform_system == "Windows" and python_version < "3.13"',
-]
 
 [dependency-groups]
 dev = [
@@ -80,7 +67,13 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.9",
     "mypy>=1.11",
-    "ELM327-emulator>=3.0.5",
+    # PyPI's elm327-emulator 3.0.4/3.0.5 are sdist-only and build via
+    # setuptools-scm, which walks up to the *parent* git repo and stamps a
+    # mismatched `3.0.5.postN` version that uv rejects on a clean build (CI /
+    # fresh clones). Pin the git source at the v3.0.5 tag instead: uv clones it
+    # with its own .git, so the version resolves cleanly to 3.0.5 — the exact
+    # code PyPI 3.0.5 was cut from. Dev/test only; not in the published package.
+    "ELM327-emulator @ git+https://github.com/Ircama/ELM327-emulator.git@690c9d4719ed0aa49661a644f2eea2539bb97bbf",
 ]
 
 [tool.pytest.ini_options]

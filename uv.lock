@@ -6,13 +6,6 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
-[manifest]
-
-[[manifest.dependency-metadata]]
-name = "elm327-emulator"
-version = "3.0.5"
-requires-dist = ["python-daemon", "pyyaml", "obd", "pyreadline3 ; python_full_version < '3.13' and sys_platform == 'win32'"]
-
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -206,14 +199,13 @@ wheels = [
 [[package]]
 name = "elm327-emulator"
 version = "3.0.5"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/Ircama/ELM327-emulator.git?rev=690c9d4719ed0aa49661a644f2eea2539bb97bbf#690c9d4719ed0aa49661a644f2eea2539bb97bbf" }
 dependencies = [
     { name = "obd" },
     { name = "pyreadline3", marker = "python_full_version < '3.13' and sys_platform == 'win32'" },
     { name = "python-daemon" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/12/3c2776e89deb528ca284bd7ce353598294fcaa268b85aa296424dd52f8a1/elm327_emulator-3.0.5.tar.gz", hash = "sha256:c4527894abd613f36c87ecba47b6b4ea91fd2b123509fd71d9e49ab41e656d87", size = 109473, upload-time = "2025-12-12T19:51:00.516Z" }
 
 [[package]]
 name = "flexcache"
@@ -537,7 +529,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "elm327-emulator", specifier = ">=3.0.5" },
+    { name = "elm327-emulator", git = "https://github.com/Ircama/ELM327-emulator.git?rev=690c9d4719ed0aa49661a644f2eea2539bb97bbf" },
     { name = "mypy", specifier = ">=1.11" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
