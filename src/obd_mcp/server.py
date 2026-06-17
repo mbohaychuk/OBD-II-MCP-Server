@@ -242,6 +242,14 @@ async def lookup_recalls_and_complaints(
     return await T.lookup_recalls_and_complaints(year=year, make=make, model=model)
 
 
+def _elicitation_approved(result: object) -> bool:
+    """True only when the user explicitly accepted the elicitation AND set
+    confirm=True. Any other outcome — declined, cancelled, or an
+    unsupported-elicitation fallback — is a refusal, so a destructive Mode 04
+    never runs without affirmative consent."""
+    return isinstance(result, AcceptedElicitation) and bool(result.data.confirm)
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -260,7 +268,7 @@ async def clear_dtcs(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
 
     async def confirm(message: str, _incomplete: list[str]) -> bool:
         result = await ctx.elicit(message=message, schema=_ClearDtcsConfirmation)
-        return isinstance(result, AcceptedElicitation) and result.data.confirm
+        return _elicitation_approved(result)
 
     return await T.clear_dtcs(_app(ctx).client, confirm)
 
