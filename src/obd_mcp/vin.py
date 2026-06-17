@@ -78,9 +78,11 @@ async def decode_vin(
             await client.aclose()
 
     results = payload.get("Results") if isinstance(payload, dict) else None
-    if not results:
+    if not isinstance(results, list) or not results:
         return None
     row = results[0]
+    if not isinstance(row, dict):
+        return None
 
     return {
         "year": _coerce_int(row.get("ModelYear")),
