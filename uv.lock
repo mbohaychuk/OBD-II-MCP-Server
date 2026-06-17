@@ -492,15 +492,19 @@ wheels = [
 [[package]]
 name = "obd"
 version = "0.7.3"
-source = { git = "https://github.com/brendan-w/python-OBD.git?rev=a378bdd81d58c67d08050e4244173a9a7dbda73d#a378bdd81d58c67d08050e4244173a9a7dbda73d" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pint" },
     { name = "pyserial" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/f9/37/3ae6fd261f911fb3292249a876061786a54486cd5899d49b1406c3483921/obd-0.7.3.tar.gz", hash = "sha256:27b8f043376ca700edb98bf5216e2912295ecde0e735b260999f2d9ddf342522", size = 72967, upload-time = "2025-04-07T05:21:25.892Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/47/8ef35b33fc80db40d4a42632b0a22b2b2ed7671832dbc9bda9d912a826b0/obd-0.7.3-py3-none-any.whl", hash = "sha256:f26da700f13683a27855e6a439db72f7025fff6f1fd47ad4c6c33089d9fe7cab", size = 72130, upload-time = "2025-04-07T05:21:24.094Z" },
+]
 
 [[package]]
 name = "obd-mcp"
-version = "0.0.1"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -521,7 +525,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.27.0" },
-    { name = "obd", git = "https://github.com/brendan-w/python-OBD.git?rev=a378bdd81d58c67d08050e4244173a9a7dbda73d" },
+    { name = "obd", specifier = "==0.7.3" },
 ]
 
 [package.metadata.requires-dev]
