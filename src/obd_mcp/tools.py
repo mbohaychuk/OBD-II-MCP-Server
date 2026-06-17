@@ -305,9 +305,13 @@ async def read_readiness_monitors(client: ObdClient) -> dict[str, Any]:
         }
     status = resp.value
     monitors: list[dict[str, Any]] = []
+    # EGR_VVT_SYSTEM_MONITORING appears in both SPARK_TESTS and
+    # COMPRESSION_TESTS, so de-dupe by name to emit each monitor once.
+    seen: set[str] = set()
     for test_name in BASE_TESTS + SPARK_TESTS + COMPRESSION_TESTS:
-        if test_name is None:
+        if test_name is None or test_name in seen:
             continue
+        seen.add(test_name)
         test = getattr(status, test_name, None)
         if test is None:
             continue
