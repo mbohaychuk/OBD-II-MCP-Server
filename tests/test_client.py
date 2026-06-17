@@ -7,9 +7,11 @@ executor threads, but every public method is a coroutine.
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import obd
 import pytest
+from obd import OBDStatus
 
 from obd_mcp.client import ObdClient
 
@@ -85,3 +87,56 @@ async def test_close_and_reconnect(elm_simulator: str) -> None:
         assert not resp.is_null()
     finally:
         await client.close()
+
+
+class _BlockingConn:
+    """Fake python-OBD connection whose query() blocks until released, so we
+    can deterministically interleave close() with an in-flight query()."""
+
+    def __init__(self) -> None:
+        self.events: list[str] = []
+        self._log_lock = threading.Lock()
+        self.release = threading.Event()
+        self.query_started = threading.Event()
+
+    def is_connected(self) -> bool:
+        return True
+
+    def status(self) -> str:
+        return OBDStatus.CAR_CONNECTED
+
+    def query(self, _command: object) -> str:
+        self._record("query_start")
+        self.query_started.set()
+        self.release.wait(2.0)
+        self._record("query_end")
+        return "resp"
+
+    def close(self) -> None:
+        self._record("close")
+
+    def _record(self, event: str) -> None:
+        with self._log_lock:
+            self.events.append(event)
+
+
+@pytest.mark.asyncio
+async def test_close_waits_for_in_flight_query() -> None:
+    """close() must not tear down the connection while a query() is mid-flight
+    on the same serial port — both run real I/O and must be serialized."""
+    client = ObdClient(portstr="socket://unused")
+    fake = _BlockingConn()
+    client._connection = fake  # type: ignore[assignment]
+
+    query_task = asyncio.create_task(client.query(obd.commands.RPM))
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, fake.query_started.wait, 2.0)
+
+    close_task = asyncio.create_task(client.close())
+    await asyncio.sleep(0.05)
+    # close() must be blocked behind the in-flight query's I/O lock.
+    assert "close" not in fake.events
+
+    fake.release.set()
+    await asyncio.gather(query_task, close_task)
+    assert fake.events == ["query_start", "query_end", "close"]
