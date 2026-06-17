@@ -66,8 +66,9 @@ class ObdClient:
         """Map python-OBD post-connect status to the ObdError taxonomy.
 
         python-OBD swallows pyserial exceptions and hands back a live
-        `OBD` object with a text status. We coerce that text into the
-        five-code error taxonomy the tool surface promises.
+        `OBD` object with a text status. We coerce that text into the two
+        reachable connection-level ObdError codes (UNABLE_TO_CONNECT,
+        BUS_INIT_ERROR); see errors.py.
         """
         status = str(conn.status())
         if status == OBDStatus.NOT_CONNECTED:
