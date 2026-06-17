@@ -1,6 +1,6 @@
 [project]
 name = "obd-mcp"
-version = "0.0.1"
+version = "0.1.0"
 description = "MCP server bridging LLM agents to a live OBD-II port via an ELM327 adapter."
 readme = "README.md"
 license = "Apache-2.0"
@@ -36,7 +36,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.27.0",
-    "obd @ git+https://github.com/brendan-w/python-OBD.git@a378bdd81d58c67d08050e4244173a9a7dbda73d",
+    "obd==0.7.3",
     "httpx>=0.27",
 ]
 
@@ -53,14 +53,13 @@ obd-mcp = "obd_mcp.server:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.uv.extra-build-dependencies]
-elm327-emulator = ["setuptools<80"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/obd_mcp"]
+
+# ELM327-emulator (dev/test simulator, git source) builds via setuptools-scm and
+# needs setuptools available in the build environment.
+[tool.uv.extra-build-dependencies]
+elm327-emulator = ["setuptools<80"]
 
 [dependency-groups]
 dev = [
@@ -68,7 +67,13 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.9",
     "mypy>=1.11",
-    "ELM327-emulator>=3.0.5",
+    # PyPI's elm327-emulator 3.0.4/3.0.5 are sdist-only and build via
+    # setuptools-scm, which walks up to the *parent* git repo and stamps a
+    # mismatched `3.0.5.postN` version that uv rejects on a clean build (CI /
+    # fresh clones). Pin the git source at the v3.0.5 tag instead: uv clones it
+    # with its own .git, so the version resolves cleanly to 3.0.5 — the exact
+    # code PyPI 3.0.5 was cut from. Dev/test only; not in the published package.
+    "ELM327-emulator @ git+https://github.com/Ircama/ELM327-emulator.git@690c9d4719ed0aa49661a644f2eea2539bb97bbf",
 ]
 
 [tool.pytest.ini_options]

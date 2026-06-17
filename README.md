@@ -1,14 +1,17 @@
 # obd-mcp
 
+[![CI](https://github.com/mbohaychuk/OBD-II-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/mbohaychuk/OBD-II-MCP-Server/actions/workflows/ci.yml)
+
 An MCP server that bridges any MCP host (Claude Desktop, Cursor, agentic
 clients, …) to a live OBD-II port via an ELM327 adapter. Python, stdio
 transport, FastMCP. See `docs/PLAN.md` for roadmap and `docs/DECISIONS.md`
 for the load-bearing design choices.
 
-Status: Phase 3 tool surface complete against the Ircama simulator —
-12 tools including `record_session` (with MCP resource replay),
-`list_manufacturer_signals` (bundled OBDb Ford signal sets), NHTSA
-recalls/complaints, and an optional Sidekick repair-info passthrough.
+Status: Phase 3 tool surface complete against the Ircama simulator and
+hardened (v0.1.0, 117 tests, CI). 11 tools — `record_session` (with MCP
+resource replay), `list_manufacturer_signals` (bundled OBDb Ford signal
+sets), NHTSA recalls/complaints — plus an optional Sidekick repair-info
+passthrough (the 12th tool, registered only when `SIDEKICK_URL` is set).
 Field validation on the 2006 A8 (legacy protocols) and Bluetooth-classic
 path still pending a garage session. Demo video: TBD (recording on the
 2025 Mustang EcoBoost once the OBDLink CX adapter arrives).
@@ -76,19 +79,26 @@ is optional — see **Configuration** below.
 
 ### Error taxonomy
 
-Transport-level failures surface as an MCP tool error whose message is
+Connection-level failures surface as an MCP tool error whose message is
 prefixed with one of:
 
 | Code | Meaning |
 |---|---|
 | `UNABLE_TO_CONNECT` | Adapter not reachable on the given port URL. |
 | `BUS_INIT_ERROR` | ELM327 is alive but could not initialize the CAN/K-line bus. |
-| `ADAPTER_TIMEOUT` | Request sent but the adapter did not respond in time. |
-| `CAN_ERROR` | Bus-level CAN error surfaced by the adapter. |
-| `NO_DATA` | No ECU responded to the request. |
 
-Per-PID `NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID` cases inside
-`read_live_data` remain in-band (they are data, not transport failures).
+Everything else is reported **in-band** as data, not a transport error.
+Inside `read_live_data`, each requested PID carries its own outcome:
+
+| Marker | Meaning |
+|---|---|
+| `NO_DATA` | The ECU returned nothing for that PID. |
+| `NOT_SUPPORTED` | The ECU does not advertise support for that PID. |
+| `UNKNOWN_PID` | The requested name is not a known OBD-II PID. |
+
+Richer connection-error codes — adapter timeout, bus-level CAN error —
+are deferred until they can be detected from raw ELM327 reply tokens and
+validated on real hardware (see `docs/DECISIONS.md`).
 
 ## Troubleshooting
 
@@ -102,8 +112,8 @@ Per-PID `NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID` cases inside
 - Very cheap clones may need `OBD_PORT` protocol forced; not exposed yet (file an issue if you hit this).
 - 2006-era vehicles may be K-line only; legacy protocols not yet validated.
 
-**`ADAPTER_TIMEOUT`** — the adapter accepted the request but didn't reply in time.
-- Clone adapters add 100–300ms per query. If you see this during `record_session`, lower `hz_target`.
+**Slow or missing readings (`NO_DATA` from a cheap clone)** — an adapter that handshakes fine can still be too slow to answer every query.
+- Clone adapters add 100–300ms per query. During `record_session`, lower `hz_target`.
 - USB cables under 1m work best; long cables + clones are a common cause.
 
 **`clear_dtcs` elicitation doesn't appear** — the MCP host may not support elicitation.

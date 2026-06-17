@@ -12,11 +12,18 @@ from enum import StrEnum
 
 
 class ObdErrorCode(StrEnum):
-    NO_DATA = "NO_DATA"
-    BUS_INIT_ERROR = "BUS_INIT_ERROR"
-    CAN_ERROR = "CAN_ERROR"
+    """Connection-level failures `ObdClient` raises as an `ObdError`.
+
+    Only the codes actually reachable today. python-OBD reports adapter
+    timeouts and CAN faults as a null `OBDResponse` rather than an exception,
+    so timeout / CAN-error codes are deferred until they can be detected from
+    raw ELM327 reply tokens and validated on real hardware (see DECISIONS.md).
+    Per-PID outcomes (`NO_DATA` / `NOT_SUPPORTED` / `UNKNOWN_PID`) are returned
+    in-band by `read_live_data` as data — they are not raised here.
+    """
+
     UNABLE_TO_CONNECT = "UNABLE_TO_CONNECT"
-    ADAPTER_TIMEOUT = "ADAPTER_TIMEOUT"
+    BUS_INIT_ERROR = "BUS_INIT_ERROR"
 
 
 class ObdError(Exception):

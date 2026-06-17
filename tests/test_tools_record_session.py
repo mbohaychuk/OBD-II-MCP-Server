@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from obd_mcp.client import ObdClient
+from obd_mcp.errors import ObdError, ObdErrorCode
 from obd_mcp.tools import record_session
 
 
@@ -134,3 +135,47 @@ async def test_record_session_samples_count_roughly_matches_rate() -> None:
     )
     # Target = 4 samples; accept a wide range so slow CI machines don't flake.
     assert 2 <= result["samples_count"] <= 8
+    assert result["ended_early"] is None
+
+
+class _DropMidSessionClient:
+    """Succeeds for the first sample, then raises a transport ObdError —
+    simulates an adapter dropping out mid-recording."""
+
+    def __init__(self, fail_on_query: int) -> None:
+        self.query_calls = 0
+        self._fail_on = fail_on_query
+
+    async def supports(self, _cmd: Any) -> bool:
+        return True
+
+    async def query(self, _cmd: Any) -> Any:
+        import obd
+
+        self.query_calls += 1
+        if self.query_calls >= self._fail_on:
+            raise ObdError(ObdErrorCode.UNABLE_TO_CONNECT, "adapter unplugged")
+
+        class R:
+            value = obd.Unit.Quantity(1200, obd.Unit.rpm)
+
+            def is_null(self) -> bool:
+                return False
+
+        return R()
+
+
+@pytest.mark.asyncio
+async def test_record_session_transport_drop_keeps_partial_samples() -> None:
+    """A transport failure mid-recording ends early but preserves samples."""
+    client = _DropMidSessionClient(fail_on_query=2)
+    result = await record_session(
+        client,  # type: ignore[arg-type]
+        duration_s=0.5,
+        pids=["RPM"],
+        hz_target=20.0,
+    )
+    assert result["samples_count"] == 1
+    assert len(result["samples"]) == 1
+    assert result["ended_early"] is not None
+    assert "UNABLE_TO_CONNECT" in result["ended_early"]["reason"]

@@ -21,6 +21,7 @@ from obd.codes import BASE_TESTS, COMPRESSION_TESTS, SPARK_TESTS
 
 from obd_mcp.client import ObdClient
 from obd_mcp.dtc_db import DtcDatabase
+from obd_mcp.errors import ObdError
 from obd_mcp.nhtsa import lookup_complaints, lookup_recalls
 from obd_mcp.obdb import load_signals
 from obd_mcp.sidekick import fetch_repair_info
@@ -305,9 +306,13 @@ async def read_readiness_monitors(client: ObdClient) -> dict[str, Any]:
         }
     status = resp.value
     monitors: list[dict[str, Any]] = []
+    # EGR_VVT_SYSTEM_MONITORING appears in both SPARK_TESTS and
+    # COMPRESSION_TESTS, so de-dupe by name to emit each monitor once.
+    seen: set[str] = set()
     for test_name in BASE_TESTS + SPARK_TESTS + COMPRESSION_TESTS:
-        if test_name is None:
+        if test_name is None or test_name in seen:
             continue
+        seen.add(test_name)
         test = getattr(status, test_name, None)
         if test is None:
             continue
@@ -402,9 +407,12 @@ async def record_session(
     hz × duration, not a guarantee.
 
     Returns `{session_id, resource_uri, duration_s, hz_target, pids,
-    samples_count, samples, started_at}`. The caller is expected to
-    stash this under `server._SESSIONS[session_id]` so the MCP resource
-    at `resource_uri` can serve it back.
+    samples_count, samples, started_at, ended_early}`. `ended_early` is
+    `None` on a clean run, or `{"reason": "[CODE] ..."}` when a transport
+    failure cut the recording short — the samples collected before the
+    drop are still returned. The caller is expected to stash this under
+    `server._SESSIONS[session_id]` so the MCP resource at `resource_uri`
+    can serve it back.
     """
     if duration_s <= 0 or duration_s > RECORD_MAX_DURATION_S:
         raise ValueError(f"duration_s must be in (0, {RECORD_MAX_DURATION_S}], got {duration_s}")
@@ -424,12 +432,20 @@ async def record_session(
     target_count = max(1, int(round(duration_s * hz_target)))
     samples: list[dict[str, Any]] = []
 
+    ended_early: dict[str, str] | None = None
     next_t = started_at
     while time.time() < deadline:
         wait = next_t - time.time()
         if wait > 0:
             await asyncio.sleep(wait)
-        readings = await read_live_data(client, pids)
+        try:
+            readings = await read_live_data(client, pids)
+        except ObdError as err:
+            # A transport failure mid-recording (adapter unplugged, bus drop)
+            # ends the session early but keeps the samples collected so far,
+            # rather than discarding the whole timeseries.
+            ended_early = {"reason": str(err)}
+            break
         now = time.time()
         samples.append({"t": now - started_at, "readings": readings})
         if progress is not None:
@@ -445,6 +461,7 @@ async def record_session(
         "samples_count": len(samples),
         "samples": samples,
         "started_at": started_at,
+        "ended_early": ended_early,
     }
 
 

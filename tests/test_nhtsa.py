@@ -186,3 +186,36 @@ async def test_lookup_recalls_missing_results_key_returns_empty() -> None:
 
     async with _make_client(handler) as client:
         assert await lookup_recalls("Ford", "Mustang", 2025, client=client) == []
+
+
+@pytest.mark.asyncio
+async def test_lookup_complaints_non_numeric_counts_do_not_raise() -> None:
+    """Best-effort: garbage injury/death counts must not break the envelope.
+
+    The row mapping runs outside the fetch try/except, so a non-numeric
+    count would otherwise escape as a ValueError and violate the
+    never-raise contract.
+    """
+
+    payload: dict[str, Any] = {
+        "count": 1,
+        "results": [
+            {
+                "odiNumber": 1,
+                "components": "ENGINE",
+                "summary": "x",
+                "numberOfInjuries": "two",
+                "numberOfDeaths": "N/A",
+            }
+        ],
+    }
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return _ok(payload)
+
+    async with _make_client(handler) as client:
+        complaints = await lookup_complaints("Ford", "Mustang", 2025, client=client)
+
+    assert len(complaints) == 1
+    assert complaints[0]["injuries"] == 0
+    assert complaints[0]["deaths"] == 0

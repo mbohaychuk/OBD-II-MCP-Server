@@ -156,3 +156,29 @@ async def test_decode_vin_treats_empty_string_fields_as_none() -> None:
     assert result["model"] is None
     assert result["displacement_liters"] is None
     assert result["cylinders"] is None
+
+
+@pytest.mark.asyncio
+async def test_decode_vin_returns_none_on_non_dict_result_row() -> None:
+    """vPIC shape drift: a non-dict row must collapse to None, not crash.
+
+    Best-effort enrichment never raises — a malformed payload must not take
+    down the whole get_vehicle_info response.
+    """
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return _ok_response({"Results": ["unexpected-string-row"]})
+
+    async with _make_client(handler) as c:
+        result = await decode_vin(VALID_VIN, client=c)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_decode_vin_returns_none_when_results_not_a_list() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return _ok_response({"Results": "garbage"})
+
+    async with _make_client(handler) as c:
+        result = await decode_vin(VALID_VIN, client=c)
+    assert result is None

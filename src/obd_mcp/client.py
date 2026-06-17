@@ -2,8 +2,10 @@
 
 python-OBD is thread-based and blocking. MCP tool handlers are asyncio
 coroutines. Every call into python-OBD is pushed onto the default
-executor via `run_in_executor`, and a single `asyncio.Lock` serializes
-connection setup and teardown.
+executor via `run_in_executor`. Two locks guard it: `_conn_lock`
+serializes connection setup/teardown, and `_io_lock` serializes queries.
+Teardown takes both, in that order, so close() cannot run concurrently
+with an in-flight query() on the same connection.
 """
 
 from __future__ import annotations
@@ -64,8 +66,9 @@ class ObdClient:
         """Map python-OBD post-connect status to the ObdError taxonomy.
 
         python-OBD swallows pyserial exceptions and hands back a live
-        `OBD` object with a text status. We coerce that text into the
-        five-code error taxonomy the tool surface promises.
+        `OBD` object with a text status. We coerce that text into the two
+        reachable connection-level ObdError codes (UNABLE_TO_CONNECT,
+        BUS_INIT_ERROR); see errors.py.
         """
         status = str(conn.status())
         if status == OBDStatus.NOT_CONNECTED:
@@ -118,8 +121,13 @@ class ObdClient:
                 return
             conn = self._connection
             self._connection = None
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, conn.close)
+            # Hold _io_lock so teardown can't run conn.close() concurrently
+            # with an in-flight query() on the same serial port. query()
+            # never holds _conn_lock while holding _io_lock, so this ordering
+            # (conn → io) cannot deadlock.
+            async with self._io_lock:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, conn.close)
 
     async def __aenter__(self) -> ObdClient:
         return self

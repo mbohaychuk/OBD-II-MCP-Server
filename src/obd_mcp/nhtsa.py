@@ -70,6 +70,20 @@ def _recall_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _coerce_count(value: Any) -> int:
+    """Best-effort non-negative count. Garbage / non-numeric → 0, never raises.
+
+    This mapping runs outside the fetch try/except, so it must not propagate
+    a ValueError on a non-numeric count and break the never-raise envelope.
+    """
+    if not value:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _complaint_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "odi_number": row.get("odiNumber"),
@@ -77,8 +91,8 @@ def _complaint_row(row: dict[str, Any]) -> dict[str, Any]:
         "summary": row.get("summary"),
         "crash": bool(row.get("crash", False)),
         "fire": bool(row.get("fire", False)),
-        "injuries": int(row.get("numberOfInjuries") or 0),
-        "deaths": int(row.get("numberOfDeaths") or 0),
+        "injuries": _coerce_count(row.get("numberOfInjuries")),
+        "deaths": _coerce_count(row.get("numberOfDeaths")),
         "incident_date": row.get("dateOfIncident"),
         "filed_date": row.get("dateComplaintFiled"),
     }
