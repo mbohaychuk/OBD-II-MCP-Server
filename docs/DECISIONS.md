@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-06-18 — Remove `lookup_repair_info` / Sidekick coupling — `obd-mcp` stays consumer-agnostic
+
+**Context.** The 2026-04-23 entry added a `lookup_repair_info` tool that, when `SIDEKICK_URL` was set, proxied DTC lookups to a Mechanics Sidekick RAG endpoint. That baked knowledge of a specific consumer (Sidekick) and of repair-manual RAG into `obd-mcp` — contradicting the project's own composability stance (a dumb OBD-II reader that knows nothing about who's calling it; cf. the 2026-04-22 "no bespoke UI on obd-mcp" entry).
+**Decision.** Remove it entirely: delete `sidekick.py`, the `lookup_repair_info` tool, the `register_sidekick_tool` wiring, the `SIDEKICK_URL` env var, and their tests/docs. `obd-mcp` exposes only OBD-II reader tools. Repair-knowledge lookup is the **host's** job — a host (Mechanics Sidekick, Claude Desktop, …) holds `obd-mcp`'s tools alongside its own document/RAG tools, and the calling LLM decides which to invoke. The tool surface drops from 12 (11 + the conditional one) to a flat 11.
+**Why.** A reader that knows about its consumer isn't composable. Manuals, RAG, and Sidekick are orchestration concerns that belong to the agent/host, not the OBD-II data source. Removing the coupling sharpens the boundary the whole project rests on, and makes the planned Sidekick-as-MCP-host integration (PLAN Phase 5) cleaner — Sidekick consumes `obd-mcp` like any other tool provider, with no back-channel. Reverses the 2026-04-23 `lookup_repair_info` contract decision.
+
 ## 2026-06-17 — Connection transport seam; BLE backend deferred to hardware validation
 
 **Context.** Connecting a real adapter (Vgate iCar Pro, BLE + WiFi) exposed that `OBD_PORT` setup is painful: a WiFi AP steals the laptop's internet, classic Bluetooth needs a manual `rfcomm bind`, and BLE needs an external `ble-serial` bridge to a pseudo-terminal. python-OBD only opens serial / `socket://` URLs; BLE (GATT, no serial profile) can't be handed to it directly. We want obd-mcp to own the connection so setup is "turn the adapter on", with adapter auto-detection later.

@@ -2,7 +2,7 @@
 
 **Goal.** A Python MCP server that bridges any MCP host (Claude Desktop, Cursor, Mechanics Sidekick) to a live OBD-II port via an ELM327 adapter. Published to Smithery + mcp.so. Paired with a repair-knowledge RAG (Mechanics Sidekick, a separate project) for grounded diagnostic conversations.
 
-**Status.** Phase 3 tool surface complete against the Ircama simulator and hardened. 11 tools (12 with the optional Sidekick passthrough): `record_session` (MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), `lookup_recalls_and_complaints` (NHTSA public API), and the optional env-gated `lookup_repair_info` (Sidekick passthrough). **Release unblocked** — depends on PyPI `obd==0.7.3` (byte-identical to the old commit pin), version 0.1.0, wheel metadata PyPI-valid (see `docs/RELEASE.md` and the 2026-06-16 DECISIONS entry). 117 tests green; ruff / mypy strict clean; GitHub Actions CI added. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path. Publishing to PyPI / Smithery / mcp.so awaits a token + go-ahead.
+**Status.** Phase 3 tool surface complete against the Ircama simulator and hardened. 11 tools: `record_session` (MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), and `lookup_recalls_and_complaints` (NHTSA public API). **Release unblocked** — depends on PyPI `obd==0.7.3` (byte-identical to the old commit pin), version 0.1.0, wheel metadata PyPI-valid (see `docs/RELEASE.md` and the 2026-06-16 DECISIONS entry). 116 tests green; ruff / mypy strict clean; GitHub Actions CI added. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path. Publishing to PyPI / Smithery / mcp.so awaits a token + go-ahead.
 
 Each decision below has a rationale captured in `DECISIONS.md`. Don't re-litigate without updating that file.
 
@@ -36,8 +36,7 @@ Each decision below has a rationale captured in `DECISIONS.md`. Don't re-litigat
                                      │  │ Knowledge layer       │  │
                                      │  │  ├─ Wal33D DTC DB     │  │  bundled, MIT
                                      │  │  ├─ NHTSA vPIC        │  │  live, public
-                                     │  │  ├─ NHTSA TSB/recalls │  │  live, public
-                                     │  │  └─ Sidekick RAG (opt)│  │  user-supplied
+                                     │  │  └─ NHTSA TSB/recalls │  │  live, public
                                      │  └───────────────────────┘  │
                                      └─────────────────────────────┘
 ```
@@ -66,7 +65,6 @@ Purpose-built tools, not a raw command passthrough. The ergonomics differentiate
 | `read_readiness_monitors()` | readOnly, idempotent | Emissions monitor completion status. Required pre-check for `clear_dtcs`. |
 | `list_manufacturer_signals(make, model, year?)` | readOnly, idempotent | Bundled OBDb Mode 22 signal catalogue (Ford Mustang + F-150); metadata only, live Mode 22 reads deferred. |
 | `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA public API. (TSBs + investigations are not publicly served; see DECISIONS.) |
-| `lookup_repair_info(dtc, year, make, model)` | readOnly, idempotent | Optional passthrough to a user-configured Mechanics Sidekick endpoint. Registered only when `SIDEKICK_URL` is set. |
 | `clear_dtcs()` | destructive, requires elicitation | Runs `read_readiness_monitors` first and surfaces incomplete-monitor warning in the elicit prompt. |
 
 (The DTC-description join planned as a standalone `decode_dtc` tool was folded into `read_dtcs`; manufacturer data is exposed via `list_manufacturer_signals`. `ping()` is also registered as a health check.)
@@ -109,11 +107,10 @@ Tools: `get_vehicle_info`, `list_supported_pids`, `read_live_data`, `read_dtcs`,
 
 ### Phase 3 — Differentiation (1–2 weeks)
 
-**Acceptance:** Demo video recorded on 2025 Mustang with genuine adapter. Server live on Smithery and mcp.so. Sidekick-optional integration working.
+**Acceptance:** Demo video recorded on 2025 Mustang with genuine adapter. Server live on Smithery and mcp.so.
 
 - `record_session` with `ctx.report_progress` streaming. Timeseries exposed via MCP resource `obd://sessions/{id}.json` (in-memory store; dies with server).
 - `lookup_recalls_and_complaints` via NHTSA API.
-- `lookup_repair_info` — optional, wired to a user-configured Sidekick endpoint (URL in env var, absent = tool not registered).
 - Per-make manufacturer-specific PID metadata using `github.com/OBDb/*` JSON signal sets. Bundled: Ford Mustang + F-150 (Edge has no OBDb repo, A8 out of scope). Live Mode 22 reads deferred — see DECISIONS.
 - README with installation, supported hosts, troubleshooting, demo video embed.
 - Published to PyPI, Smithery, mcp.so.
@@ -143,7 +140,7 @@ Recorded against the 2025 Mustang EcoBoost with a genuine OBDLink adapter. Targe
 1. **Open Claude Desktop.** "Why is my check engine light on?"
 2. Claude calls `read_dtcs` → returns e.g. `P0300 - Random/Multiple Cylinder Misfire Detected`. Human-readable explanation.
 3. Claude calls `read_freeze_frame` → shows RPM / speed / coolant temp / fuel trims at the moment the DTC set. "The misfire happened at operating temp, mid-throttle, cruising."
-4. Claude calls `lookup_repair_info` against Sidekick (if configured), grounding the diagnostic narrative in the actual service manual. "The Mustang service manual lists these common causes for P0300..."
+4. The host (e.g. Mechanics Sidekick) grounds the diagnosis in the service manual with its *own* repair-knowledge tool — `obd-mcp` provides the vehicle data, the host provides the manuals. "The Mustang service manual lists these common causes for P0300..."
 5. Claude calls `read_live_data` on fuel-trim and O2-voltage PIDs to narrow the candidate list.
 6. **"I replaced the spark plugs, clear the code."** Claude calls `clear_dtcs`. Elicitation dialog appears with the readiness-monitor warning. User confirms. Code cleared.
 

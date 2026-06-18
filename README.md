@@ -8,10 +8,9 @@ transport, FastMCP. See `docs/PLAN.md` for roadmap and `docs/DECISIONS.md`
 for the load-bearing design choices.
 
 Status: Phase 3 tool surface complete against the Ircama simulator and
-hardened (v0.1.0, 117 tests, CI). 11 tools — `record_session` (with MCP
+hardened (v0.1.0, 116 tests, CI). 11 tools — `record_session` (with MCP
 resource replay), `list_manufacturer_signals` (bundled OBDb Ford signal
-sets), NHTSA recalls/complaints — plus an optional Sidekick repair-info
-passthrough (the 12th tool, registered only when `SIDEKICK_URL` is set).
+sets), and NHTSA recalls/complaints.
 Field validation on the 2006 A8 (legacy protocols) and Bluetooth-classic
 path still pending a garage session. Demo video: TBD (recording on the
 2025 Mustang EcoBoost once the OBDLink CX adapter arrives).
@@ -35,8 +34,7 @@ uv run obd-mcp
       "command": "uv",
       "args": ["--directory", "/absolute/path/to/OBD-II-MCP-Server", "run", "obd-mcp"],
       "env": {
-        "OBD_PORT": "socket://192.168.0.10:35000",
-        "SIDEKICK_URL": "http://localhost:8080"
+        "OBD_PORT": "socket://192.168.0.10:35000"
       }
     }
   }
@@ -44,15 +42,13 @@ uv run obd-mcp
 ```
 
 If `OBD_PORT` is unset the server defaults to `socket://localhost:35000`,
-matching the Ircama ELM327-emulator's default TCP port. `SIDEKICK_URL`
-is optional — see **Configuration** below.
+matching the Ircama ELM327-emulator's default TCP port.
 
 ## Configuration
 
 | Env var | Default | Purpose |
 |---|---|---|
 | `OBD_PORT` | `socket://localhost:35000` | pyserial URL for the adapter. Examples: `/dev/ttyUSB0`, `/dev/rfcomm0`, `socket://192.168.0.10:35000`. |
-| `SIDEKICK_URL` | _(unset)_ | Base URL of a Mechanics Sidekick RAG endpoint. If set, the `lookup_repair_info` tool is registered; if unset, the tool is not advertised to the host at all. |
 
 ## Tool surface
 
@@ -68,7 +64,6 @@ is optional — see **Configuration** below.
 | `record_session(duration_s, pids, hz_target)` | readOnly | Time-bounded PID sampling. Streams progress via MCP progress notifications; returns timeseries inline and stores it under the MCP resource URI `obd://sessions/{id}.json` for later replay. In-memory only. |
 | `list_manufacturer_signals(make, model, year?)` | readOnly, idempotent | Bundled OBDb Mode 22 signal catalogue (Ford Mustang + F-150 in this release). Metadata only — live Mode 22 reads deferred. |
 | `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA safety recalls + consumer complaints for the vehicle. TSBs / investigations are not publicly served by NHTSA. |
-| `lookup_repair_info(dtc, year?, make?, model?)` | readOnly, idempotent | _Optional._ Registered only when `SIDEKICK_URL` is set. Proxies to a Mechanics Sidekick RAG endpoint for repair-manual context. |
 | `clear_dtcs` | **destructive** | Mode 04 erase. Gated by MCP elicitation — prompt surfaces incomplete monitors that will be reset. |
 
 ### MCP resources
@@ -135,7 +130,7 @@ uv run mypy
 
 The test suite spawns Ircama's ELM327-emulator on a TCP port for
 integration tests — no adapter or vehicle required. Unit tests covering
-the DTC DB, VIN/NHTSA/Sidekick lookups, OBDb signal loader, and the
+the DTC DB, VIN/NHTSA lookups, OBDb signal loader, and the
 destructive-op gating path run pure in-process via `httpx.MockTransport`.
 
 ## Credits
