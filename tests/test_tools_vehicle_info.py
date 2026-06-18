@@ -128,3 +128,58 @@ async def test_get_vehicle_info_survives_vpic_outage() -> None:
     assert info["vin"] == "1FTEW1EF2FKE12345"
     assert info["vin_decoded"] is None
     assert info["status"] == "Car Connected"
+
+
+def test_serialize_value_decodes_bytearray() -> None:
+    """python-OBD's encoded-string decoders return a bytearray; it must
+    serialize to a clean str, not a raw (non-JSON-safe) bytearray."""
+    from obd_mcp.tools import _serialize_value
+
+    assert _serialize_value(bytearray(b"AB1234")) == "AB1234"
+    assert _serialize_value(b"AB1234") == "AB1234"  # bytes path unchanged
+
+
+class _FakeVinFrame:
+    def __init__(self, data: bytes) -> None:
+        self.data = bytearray(data)
+
+
+class _RawVinResponse:
+    """Mimics an OBDResponse for VIN: raw frames plus python-OBD's value."""
+
+    def __init__(self, raw: bytes, value: object) -> None:
+        self.messages = [_FakeVinFrame(raw)]
+        self.value = value
+
+    def is_null(self) -> bool:
+        return False
+
+
+def test_decode_vin_recovers_leading_char_from_raw_frames() -> None:
+    """python-OBD's strip bug drops a leading '1'/'2'; decode from the raw
+    frames so the full 17-char VIN survives."""
+    from obd_mcp.tools import _decode_vin
+
+    vin = "1FA6P8THXS5118106"
+    # Mode 09 PID 02 response frame: [0x49, 0x02, NODI=0x01, <ascii VIN>]
+    raw = bytes([0x49, 0x02, 0x01]) + vin.encode("ascii")
+    # python-OBD would hand us the truncated bytearray as .value:
+    resp = _RawVinResponse(raw, value=bytearray(b"FA6P8THXS5118106"))
+
+    result = _decode_vin(resp)
+    assert result == vin
+    assert result.startswith("1")
+
+
+def test_decode_vin_falls_back_to_value_without_frames() -> None:
+    """A response with no raw frames (e.g. a test stub) uses the decoded value."""
+    from obd_mcp.tools import _decode_vin
+
+    class _R:
+        messages: list = []
+        value = "1FTEW1EF2FKE12345"
+
+        def is_null(self) -> bool:
+            return False
+
+    assert _decode_vin(_R()) == "1FTEW1EF2FKE12345"
