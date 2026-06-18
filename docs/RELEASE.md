@@ -117,8 +117,7 @@ uv publish dist/*
      },
      "config": {
        "env": {
-         "OBD_PORT": "pyserial URL — e.g. socket://192.168.0.10:35000",
-         "SIDEKICK_URL": "optional — Mechanics Sidekick RAG base URL"
+         "OBD_PORT": "pyserial URL — e.g. socket://192.168.0.10:35000"
        }
      },
      "tags": ["automotive", "diagnostics", "hardware"]
