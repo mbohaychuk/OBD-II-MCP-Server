@@ -59,9 +59,38 @@ def _serialize_value(value: Any) -> Any:
         return [_serialize_value(v) for v in value]
     if isinstance(value, tuple):
         return [_serialize_value(v) for v in value]
-    if isinstance(value, bytes):
+    if isinstance(value, (bytes, bytearray)):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def _decode_vin(resp: Any) -> str | None:
+    """Decode the VIN from a Mode 09 response.
+
+    python-OBD's encoded-string decoder has a strip bug: its strip set
+    accidentally includes the ASCII bytes '0', '1', '2', so it trims those off
+    the ends of the VIN — and most North-American VINs start with '1' or '2'.
+    The raw response frames are the only place the untruncated VIN survives, so
+    decode from there when present, falling back to the decoded value otherwise
+    (e.g. a test stub that supplies a value but no frames).
+    """
+    if resp.is_null():
+        return None
+    messages = getattr(resp, "messages", None)
+    if messages:
+        data = getattr(messages[0], "data", None)
+        if data:
+            # Frame: [mode-echo, pid, NODI, <ascii VIN...>]. Drop the 2-byte
+            # mode/pid echo, then strip only NODI / null padding — not ASCII.
+            vin = bytes(data)[2:].strip().strip(b"\x00\x01\x02").decode("ascii", errors="replace")
+            if vin:
+                return vin
+    value = resp.value
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("ascii", errors="replace")
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
 
 
 async def get_vehicle_info(
@@ -89,7 +118,7 @@ async def get_vehicle_info(
     if not voltage_resp.is_null() and voltage_resp.value is not None:
         voltage = float(voltage_resp.value.magnitude)
 
-    vin_value = None if vin_resp.is_null() else _serialize_value(vin_resp.value)
+    vin_value = _decode_vin(vin_resp)
     vin_decoded: dict[str, Any] | None = None
     if isinstance(vin_value, str) and vin_value.strip():
         vin_decoded = await decode_vin(vin_value, client=http_client)
