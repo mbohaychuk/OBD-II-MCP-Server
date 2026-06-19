@@ -136,7 +136,7 @@ Format: **Context · Decision · Why**.
 
 **Context.** SAE J2012 is paywalled. Community DTC datasets vary in coverage and freshness.
 **Decision.** Vendor `Wal33D/dtc-database` as a SQLite snapshot in `data/`.
-**Why.** 28,220 codes (9,415 generic + 18,805 manufacturer-specific across 33 brands), MIT, last push Feb 2026. Best license + coverage + maintenance combination found.
+**Why.** 18,805 codes (9,415 generic + 9,390 manufacturer-specific across 33 brands — `SELECT COUNT(*)` on the bundled snapshot; pinned commit in `data/dtc.sqlite.source`), MIT, last push Feb 2026. Best license + coverage + maintenance combination found.
 
 ## 2026-04-22 — Repair-knowledge RAG: user-supplied via Mechanics Sidekick
 

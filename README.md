@@ -1,6 +1,7 @@
 # obd-mcp
 
 [![CI](https://github.com/mbohaychuk/OBD-II-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/mbohaychuk/OBD-II-MCP-Server/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 An MCP server that bridges any MCP host (Claude Desktop, Cursor, agentic
 clients, …) to a live OBD-II port via an ELM327 adapter. Python, stdio
@@ -57,11 +58,11 @@ matching the Ircama ELM327-emulator's default TCP port.
 | `ping` | — | Health check (returns `"pong"`). |
 | `get_vehicle_info` | readOnly, idempotent | VIN, calibration IDs, CVN, adapter voltage, protocol, link status. VIN (when present) is enriched via NHTSA vPIC → year/make/model/displacement. |
 | `list_supported_pids` | readOnly, idempotent | Mode 01 PIDs the ECU advertises support for. |
-| `read_live_data(pids)` | readOnly | Snapshot decode of one or more Mode 01 PIDs by name. |
-| `read_dtcs(scope)` | readOnly, idempotent | `scope ∈ {stored, pending, all}`. Joined with the bundled Wal33D DTC DB. |
+| `read_live_data(pids)` | readOnly | Snapshot decode of one or more Mode 01/09 PIDs by name. Uniform rows: `value`/`unit` on success, `error` otherwise. |
+| `read_dtcs(scope, make?)` | readOnly, idempotent | `scope ∈ {stored, pending, all}`. Joined with the bundled Wal33D DTC DB; each code carries a `source` (`generic`/`manufacturer`/`wire`). Pass `make` to resolve manufacturer-range codes (e.g. Ford P1xxx). |
 | `read_freeze_frame(frame_index=0)` | readOnly, idempotent | Mode 02 sensor snapshot at DTC-set moment. `frame_index != 0` returns an in-band `FRAME_INDEX_NOT_SUPPORTED` (rare ECUs, deferred). |
 | `read_readiness_monitors` | readOnly, idempotent | Emissions-readiness monitor completion status. |
-| `record_session(duration_s, pids, hz_target)` | readOnly | Time-bounded PID sampling. Streams progress via MCP progress notifications; returns timeseries inline and stores it under the MCP resource URI `obd://sessions/{id}.json` for later replay. In-memory only. |
+| `record_session(duration_s, pids, hz_target)` | not readOnly (persists a session) | Time-bounded PID sampling. Streams progress via MCP progress notifications; returns timeseries inline and stores it under the MCP resource URI `obd://sessions/{id}.json` for later replay. In-memory only. |
 | `list_manufacturer_signals(make, model, year?)` | readOnly, idempotent | Bundled OBDb Mode 22 signal catalogue (Ford Mustang + F-150 in this release). Metadata only — live Mode 22 reads deferred. |
 | `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA safety recalls + consumer complaints for the vehicle. TSBs / investigations are not publicly served by NHTSA. |
 | `clear_dtcs` | **destructive** | Mode 04 erase. Gated by MCP elicitation — prompt surfaces incomplete monitors that will be reset. |
@@ -90,6 +91,7 @@ Inside `read_live_data`, each requested PID carries its own outcome:
 | `NO_DATA` | The ECU returned nothing for that PID. |
 | `NOT_SUPPORTED` | The ECU does not advertise support for that PID. |
 | `UNKNOWN_PID` | The requested name is not a known OBD-II PID. |
+| `NOT_A_READABLE_PID` | The name is a known command but not a Mode 01/09 read (e.g. a DTC-clear command) — only readable PIDs are accepted here. |
 
 Richer connection-error codes — adapter timeout, bus-level CAN error —
 are deferred until they can be detected from raw ELM327 reply tokens and

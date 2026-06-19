@@ -7,7 +7,7 @@ doc is the operational checklist.
 
 ## Prerequisites
 
-- [ ] OBDLink CX (or EX) adapter on hand. The WiFi clone (Amazon B06XGB4QL7) is too laggy for camera; clone latency is visibly sluggish per commit 43494ad.
+- [ ] OBDLink CX (or EX) adapter on hand. The WiFi clone (Amazon B06XGB4QL7) is too laggy for camera — clone latency is visibly sluggish (see the 2026-04-22 adapter note in `DECISIONS.md`).
 - [ ] 2025 Mustang EcoBoost keys. Engine warm enough that readiness monitors are complete-ish (otherwise the elicit prompt is dominated by "these monitors will reset" noise).
 - [ ] Claude Desktop installed with `obd-mcp` wired up in `mcp.json`.
 - [ ] Screen recorder (OBS or macOS screencap) + microphone check.

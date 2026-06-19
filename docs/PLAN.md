@@ -56,18 +56,19 @@ Purpose-built tools, not a raw command passthrough. The ergonomics differentiate
 
 | Tool | Annotations | Purpose |
 |---|---|---|
-| `get_vehicle_info()` | readOnly, idempotent | VIN, calibration IDs, CVN, connected protocol, adapter voltage, link status. Enriched with NHTSA vPIC → year/make/model/displacement. |
+| `ping()` | readOnly, idempotent | Health check; returns `"pong"`. |
+| `get_vehicle_info()` | readOnly, idempotent, openWorld | VIN, calibration IDs, CVN, connected protocol, adapter voltage, link status. Enriched with NHTSA vPIC → year/make/model/displacement. |
 | `list_supported_pids()` | readOnly, idempotent | Probes ECU; returns only PIDs this vehicle supports, with decoded names + units. |
-| `read_live_data(pids: list[str])` | readOnly | Snapshot read. Decoded values + units + timestamp. |
-| `record_session(duration_s, pids, hz_target)` | readOnly | Streams progress via `ctx.report_progress`. Returns timeseries + resource URI for replay. |
-| `read_dtcs(scope="all")` | readOnly, idempotent | scope ∈ {stored, pending, all}. Joined with Wal33D DB for descriptions. (Permanent / Mode 0A deferred.) |
+| `read_live_data(pids: list[str])` | readOnly | Snapshot read of Mode 01/09 PIDs. Uniform rows (value/unit/error). Decoded values + units + timestamp. |
+| `record_session(duration_s, pids, hz_target)` | **not** readOnly (persists a session) | Streams progress via `ctx.report_progress`. Returns timeseries + resource URI for replay. |
+| `read_dtcs(scope="all", make?)` | readOnly, idempotent | scope ∈ {stored, pending, all}. Joined with Wal33D DB; each code carries a `source` (generic/manufacturer/wire). Pass `make` to resolve manufacturer-range codes. (Permanent / Mode 0A deferred.) |
 | `read_freeze_frame(frame_index=0)` | readOnly, idempotent | Mode 02 sensor snapshot at DTC-set moment. |
 | `read_readiness_monitors()` | readOnly, idempotent | Emissions monitor completion status. Required pre-check for `clear_dtcs`. |
 | `list_manufacturer_signals(make, model, year?)` | readOnly, idempotent | Bundled OBDb Mode 22 signal catalogue (Ford Mustang + F-150); metadata only, live Mode 22 reads deferred. |
-| `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA public API. (TSBs + investigations are not publicly served; see DECISIONS.) |
-| `clear_dtcs()` | destructive, requires elicitation | Runs `read_readiness_monitors` first and surfaces incomplete-monitor warning in the elicit prompt. |
+| `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent, openWorld | NHTSA public API. (TSBs + investigations are not publicly served; see DECISIONS.) |
+| `clear_dtcs()` | destructive, requires elicitation | Runs `read_readiness_monitors` first and surfaces incomplete-monitor warning in the elicit prompt. Refuses with `elicitation_unsupported` if the host can't confirm. |
 
-(The DTC-description join planned as a standalone `decode_dtc` tool was folded into `read_dtcs`; manufacturer data is exposed via `list_manufacturer_signals`. `ping()` is also registered as a health check.)
+(The DTC-description join planned as a standalone `decode_dtc` tool was folded into `read_dtcs`.)
 
 ## 3. Phased roadmap
 
@@ -158,7 +159,7 @@ The demo proves: tool composition, grounded diagnosis, safety gating. That's the
 
 ## 6. Open items
 
-- [ ] Pick OBDLink model (CX vs EX) and order before Phase 3 demo recording.
-- [ ] Decide whether to bundle a subset of `OBDb/*` JSONs in-repo or fetch at runtime (leaning bundle for offline use).
+- [x] ~~Pick OBDLink model (CX vs EX)~~ — CX, per DECISIONS 2026-04-22.
+- [x] ~~Bundle a subset of `OBDb/*` JSONs vs fetch at runtime~~ — bundled for offline use (Mustang + F-150), per DECISIONS 2026-04-23.
 - [ ] Verify 2006 A8 protocol (CAN vs K-line) with adapter + simulator first contact.
 - [ ] Confirm Claude Desktop's current elicitation UX — version-dependent.

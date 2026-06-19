@@ -270,6 +270,10 @@ async def list_manufacturer_signals(
     obd-mcp does not issue Mode 22 reads itself yet. Unsupported
     vehicles return an in-band `{available: false, reason:
     "NO_SIGNAL_SET"}`; generic Mode 01 via `read_live_data` still works.
+
+    Pass `year` to filter to signals valid for that model year. Omitting
+    it returns the full catalogue across all model years (a superset that
+    may include signals not applicable to a specific vehicle).
     """
     return cast(
         ManufacturerSignals, await T.list_manufacturer_signals(year=year, make=make, model=model)
