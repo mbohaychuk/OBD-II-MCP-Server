@@ -141,10 +141,12 @@ async def read_live_data(
     ctx: Context,  # type: ignore[type-arg]
     pids: list[str],
 ) -> list[LiveReading]:
-    """Snapshot-read one or more Mode 01 PIDs by name (e.g. ["RPM", "SPEED"]).
+    """Snapshot-read one or more Mode 01/09 PIDs by name (e.g. ["RPM", "SPEED"]).
 
-    Unknown or unsupported PIDs are surfaced as structured error entries,
-    not exceptions. Each reading carries its own timestamp.
+    Only live-data (Mode 01) and vehicle-info (Mode 09) reads are accepted;
+    anything else (a DTC-clear or other command) returns NOT_A_READABLE_PID.
+    Unknown or unsupported PIDs are surfaced as structured error entries, not
+    exceptions. Each reading carries its own timestamp.
     """
     return cast(list[LiveReading], await T.read_live_data(_app(ctx).client, pids))
 
@@ -311,6 +313,27 @@ def _elicitation_approved(result: object) -> bool:
     return isinstance(result, AcceptedElicitation) and bool(result.data.confirm)
 
 
+def _make_clear_confirm(ctx: Context) -> T.ConfirmFn:  # type: ignore[type-arg]
+    """Build the clear_dtcs confirmer for one request.
+
+    A host that can't present an elicitation prompt can't give consent, so this
+    detects the missing capability up front and raises ElicitationUnsupported
+    (→ a clean refusal with an actionable reason) rather than letting
+    ctx.elicit() raise a generic tool error. Extracted to a module-level factory
+    so this consent-gate logic is unit-testable without a live MCP session.
+    """
+
+    async def confirm(message: str, _incomplete: list[str]) -> bool:
+        if not ctx.session.check_client_capability(
+            ClientCapabilities(elicitation=ElicitationCapability())
+        ):
+            raise T.ElicitationUnsupported
+        result = await ctx.elicit(message=message, schema=_ClearDtcsConfirmation)
+        return _elicitation_approved(result)
+
+    return confirm
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -330,19 +353,7 @@ async def clear_dtcs(ctx: Context) -> ClearDtcsResult:  # type: ignore[type-arg]
     with `reason="elicitation_unsupported"` — switch to a host that supports
     confirmation (e.g. Claude Desktop) to clear codes.
     """
-
-    async def confirm(message: str, _incomplete: list[str]) -> bool:
-        # A host that can't present the prompt can't give consent. Detect it
-        # up front rather than letting ctx.elicit() raise a generic tool error,
-        # so the refusal carries an actionable reason.
-        if not ctx.session.check_client_capability(
-            ClientCapabilities(elicitation=ElicitationCapability())
-        ):
-            raise T.ElicitationUnsupported
-        result = await ctx.elicit(message=message, schema=_ClearDtcsConfirmation)
-        return _elicitation_approved(result)
-
-    return cast(ClearDtcsResult, await T.clear_dtcs(_app(ctx).client, confirm))
+    return cast(ClearDtcsResult, await T.clear_dtcs(_app(ctx).client, _make_clear_confirm(ctx)))
 
 
 def main() -> None:

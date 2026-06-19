@@ -11,11 +11,13 @@ it conforms exactly — no missing keys, no unexpected keys, types compatible.
 from __future__ import annotations
 
 import json
+import types
 import typing
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import httpx
 import pytest
+from pydantic import TypeAdapter
 
 from obd_mcp import schemas
 from obd_mcp.client import ObdClient
@@ -65,7 +67,10 @@ def _conforms(value: Any, hint: Any, path: str) -> list[str]:
         return []
     origin = get_origin(hint)
 
-    if origin is Union:
+    # Both the typing.Union[...] form and the PEP 604 `X | None` form (whose
+    # origin is types.UnionType, NOT typing.Union) must be handled, or every
+    # nullable field would silently fall through unchecked.
+    if origin is Union or origin is types.UnionType:
         args = get_args(hint)
         if value is None and type(None) in args:
             return []
@@ -117,8 +122,14 @@ def _conforms(value: Any, hint: Any, path: str) -> list[str]:
 
 
 def _assert_conforms(value: Any, hint: Any) -> None:
+    # 1. Structural check: exact key sets at every level (catches missing AND
+    #    extra keys — pydantic ignores extras, so this is what would silently
+    #    drop a field from structuredContent).
     errs = _conforms(value, hint, hint.__name__ if isinstance(hint, type) else "$")
     assert not errs, "schema mismatch:\n  " + "\n  ".join(errs)
+    # 2. Type check via pydantic's real engine (the same validation FastMCP runs
+    #    on every result) — independent of the hand-written checker above.
+    TypeAdapter(hint).validate_python(value)
 
 
 # --- simulator-backed tools ---------------------------------------------------
@@ -149,13 +160,15 @@ async def test_list_supported_pids_conforms(elm_simulator: str) -> None:
 async def test_read_live_data_rows_conform(elm_simulator: str) -> None:
     client = ObdClient(portstr=elm_simulator)
     try:
-        # Mix a success row, an unknown-name row, and a non-readable row so all
-        # branches of the uniform shape are checked.
-        out = await read_live_data(client, ["RPM", "NOPE", "CLEAR_DTC"])
+        # Mix a success row, an unknown-name row, a non-readable row, and STATUS
+        # (whose decoded value is a non-JSON-native Status object) so all
+        # branches of the uniform shape — including serialization — are checked.
+        out = await read_live_data(client, ["RPM", "STATUS", "NOPE", "CLEAR_DTC"])
     finally:
         await client.close()
     for row in out:
         _assert_conforms(row, schemas.LiveReading)
+        json.dumps(row)  # every row must be JSON-serializable at the MCP boundary
 
 
 @pytest.mark.asyncio
@@ -186,6 +199,34 @@ async def test_read_freeze_frame_conforms_no_frame(elm_simulator: str) -> None:
     finally:
         await client.close()
     _assert_conforms(out, schemas.FreezeFrame)
+
+
+class _FreezeFrameStub:
+    """read_freeze_frame happy path: a stored DTC plus one populated Mode 02 PID,
+    so the nested dtc / frame-reading shapes get conformance coverage (the
+    simulator only ever yields the empty no-frame case)."""
+
+    def __init__(self) -> None:
+        import obd
+
+        self._dtc = ("P0301", "Cylinder 1 Misfire Detected")
+        self._readings = {"DTC_RPM": obd.Unit.Quantity(2400, obd.Unit.rpm)}
+
+    async def query(self, command: typing.Any) -> typing.Any:
+        if command.name == "DTC_FREEZE_DTC":
+            return _StubResponse(self._dtc)
+        return _StubResponse(self._readings.get(command.name))
+
+    async def supports(self, command: typing.Any) -> bool:
+        return command.name in self._readings
+
+
+@pytest.mark.asyncio
+async def test_read_freeze_frame_conforms_populated() -> None:
+    out = await read_freeze_frame(_FreezeFrameStub(), frame_index=0)  # type: ignore[arg-type]
+    assert out["available"] is True
+    _assert_conforms(out, schemas.FreezeFrame)
+    json.dumps(out)
 
 
 @pytest.mark.asyncio
