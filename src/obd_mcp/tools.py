@@ -34,8 +34,19 @@ DTC_SCOPES: frozenset[str] = frozenset({"stored", "pending", "all"})
 RECORD_MAX_DURATION_S: float = 600.0
 RECORD_MAX_HZ: float = 20.0
 
+
+class ElicitationUnsupported(Exception):
+    """Raised by a `ConfirmFn` when the host cannot ask the user at all
+    (it does not support MCP elicitation). Distinct from the user actively
+    declining — both refuse the destructive op, but only this one means
+    "no prompt was ever shown," so the caller can tell the user to switch
+    to a host that supports confirmation rather than "you declined.\""""
+
+
 # confirmer for destructive tools: receives the human-readable warning and the
-# list of incomplete monitor names; returns True iff the user/agent approves.
+# list of incomplete monitor names; returns True iff the user/agent approves,
+# False if the user declines, or raises ElicitationUnsupported if the host
+# cannot present the prompt.
 ConfirmFn = Callable[[str, list[str]], Awaitable[bool]]
 
 # Progress callback for long-running tools. Current and total are sample
@@ -402,11 +413,25 @@ async def clear_dtcs(client: ObdClient, confirm: ConfirmFn) -> dict[str, Any]:
     Gated by a runtime confirmation via the `confirm` callback. The callback
     is expected to surface the readiness-monitor warning to the user (via
     MCP elicitation in production; a test shim in the unit suite).
+
+    Fail-closed: Mode 04 is sent only on an affirmative confirm. A declined
+    confirm returns `reason="user_declined"`; a host that cannot present the
+    prompt at all (no elicitation support) returns
+    `reason="elicitation_unsupported"` so the caller can redirect the user to
+    a supported host rather than mislabel it a decline.
     """
     readiness = await read_readiness_monitors(client)
     prompt, incomplete = _build_clear_dtcs_prompt(readiness)
 
-    approved = await confirm(prompt, incomplete)
+    try:
+        approved = await confirm(prompt, incomplete)
+    except ElicitationUnsupported:
+        return {
+            "cleared": False,
+            "reason": "elicitation_unsupported",
+            "readiness_before": readiness,
+            "timestamp": time.time(),
+        }
     if not approved:
         return {
             "cleared": False,

@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from obd_mcp.client import ObdClient
-from obd_mcp.tools import clear_dtcs, read_readiness_monitors
+from obd_mcp.tools import ElicitationUnsupported, clear_dtcs, read_readiness_monitors
 
 
 @pytest.mark.asyncio
@@ -105,6 +105,21 @@ async def test_clear_dtcs_refused_by_user_does_not_send_mode_04() -> None:
     assert result["reason"] == "user_declined"
     assert "CLEAR_DTC" not in stub.queries
     assert result["readiness_before"]["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_clear_dtcs_elicitation_unsupported_is_distinct_from_declined() -> None:
+    """A host that can't elicit refuses with its own reason (not user_declined)
+    and never sends Mode 04 — so the caller can redirect to a supported host."""
+    stub = _StubClient(_StubStatus())
+
+    async def cannot_ask(_msg: str, _incomplete: list[str]) -> bool:
+        raise ElicitationUnsupported
+
+    result = await clear_dtcs(stub, cannot_ask)  # type: ignore[arg-type]
+    assert result["cleared"] is False
+    assert result["reason"] == "elicitation_unsupported"
+    assert "CLEAR_DTC" not in stub.queries
 
 
 @pytest.mark.asyncio

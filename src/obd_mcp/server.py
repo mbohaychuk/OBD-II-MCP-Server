@@ -18,7 +18,7 @@ from typing import Any
 
 from mcp.server.elicitation import AcceptedElicitation
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import ToolAnnotations
+from mcp.types import ClientCapabilities, ElicitationCapability, ToolAnnotations
 from pydantic import BaseModel, Field
 
 from obd_mcp import tools as T
@@ -244,9 +244,8 @@ async def lookup_recalls_and_complaints(
 
 def _elicitation_approved(result: object) -> bool:
     """True only when the user explicitly accepted the elicitation AND set
-    confirm=True. Any other outcome — declined, cancelled, or an
-    unsupported-elicitation fallback — is a refusal, so a destructive Mode 04
-    never runs without affirmative consent."""
+    confirm=True. Any other outcome — declined or cancelled — is a refusal,
+    so a destructive Mode 04 never runs without affirmative consent."""
     return isinstance(result, AcceptedElicitation) and bool(result.data.confirm)
 
 
@@ -262,11 +261,21 @@ async def clear_dtcs(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
 
     Destructive: resets emissions readiness monitors. The client is asked
     to confirm via MCP elicitation, and the prompt surfaces the list of
-    incomplete monitors that will be reset. If the user declines or the
-    client does not support elicitation, no Mode 04 request is sent.
+    incomplete monitors that will be reset. If the user declines, no Mode 04
+    request is sent (`reason="user_declined"`). If the host does not support
+    elicitation there is no way to obtain consent, so the clear is refused
+    with `reason="elicitation_unsupported"` — switch to a host that supports
+    confirmation (e.g. Claude Desktop) to clear codes.
     """
 
     async def confirm(message: str, _incomplete: list[str]) -> bool:
+        # A host that can't present the prompt can't give consent. Detect it
+        # up front rather than letting ctx.elicit() raise a generic tool error,
+        # so the refusal carries an actionable reason.
+        if not ctx.session.check_client_capability(
+            ClientCapabilities(elicitation=ElicitationCapability())
+        ):
+            raise T.ElicitationUnsupported
         result = await ctx.elicit(message=message, schema=_ClearDtcsConfirmation)
         return _elicitation_approved(result)
 
