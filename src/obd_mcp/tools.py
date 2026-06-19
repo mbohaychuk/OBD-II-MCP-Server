@@ -58,7 +58,12 @@ def _serialize_value(value: Any) -> Any:
     """Coerce a python-OBD response value to something JSON-safe.
 
     - pint Quantity → {"magnitude": float, "unit": str}
-    - Status / list / scalar → passed through
+    - list / tuple → recursively serialized
+    - bytes → decoded text
+    - JSON scalar (str/int/float/bool/None) → passed through
+    - anything else (e.g. python-OBD's Status object, returned by Mode 01 PID
+      01) → its string form, so it can never break JSON serialization at the
+      MCP boundary.
     """
     if value is None:
         return None
@@ -71,7 +76,9 @@ def _serialize_value(value: Any) -> Any:
         return [_serialize_value(v) for v in value]
     if isinstance(value, (bytes, bytearray)):
         return value.decode("utf-8", errors="replace")
-    return value
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 def _decode_vin(resp: Any) -> str | None:
@@ -226,6 +233,17 @@ async def read_live_data(client: ObdClient, pids: list[str]) -> list[dict[str, A
     return results
 
 
+def _is_generic_range(code: str) -> bool:
+    """Whether a DTC is in the ISO/SAE generic range vs the manufacturer range.
+
+    Per SAE J2012 the second character (first digit after the system letter)
+    encodes the authority: 0 and 2 are ISO/SAE-controlled (generic), 1 and 3 are
+    manufacturer-controlled. So the *same* P1xxx code means different things per
+    make, while a P0xxx code has one canonical generic definition.
+    """
+    return len(code) >= 2 and code[1] in ("0", "2")
+
+
 def _enrich_dtc(
     code: str,
     scope: str,
@@ -235,12 +253,11 @@ def _enrich_dtc(
 ) -> dict[str, Any]:
     """Join a raw DTC with a human description, recording its provenance.
 
-    With a `manufacturer`, a make-specific row wins over the generic one —
-    manufacturer-range codes (e.g. Ford P1xxx) often have only a useless
-    "Manufacturer Controlled DTC" generic placeholder, so preferring the
-    make's own definition is what makes the bundled per-brand data useful.
-    Falls back generic → wire. `source` is one of manufacturer/generic/wire,
-    or null when nothing resolved.
+    For a generic-range code the canonical SAE definition wins. For a
+    manufacturer-range code the make-specific row wins when a `manufacturer` is
+    supplied (this is what decodes codes like Ford P1xxx) — otherwise it falls
+    back to whatever generic row exists, then the wire description. `source` is
+    manufacturer/generic/wire, or null when nothing resolved.
     """
     description: str | None = None
     source: str | None = None
@@ -248,7 +265,10 @@ def _enrich_dtc(
         rows = dtc_db.lookup(code, manufacturer=manufacturer)
         mfr_row = next((r for r in rows if r.manufacturer != "GENERIC"), None)
         generic_row = next((r for r in rows if r.manufacturer == "GENERIC"), None)
-        if mfr_row is not None:
+        if generic_row is not None and _is_generic_range(code):
+            description = generic_row.description
+            source = "generic"
+        elif mfr_row is not None:
             description = mfr_row.description
             source = "manufacturer"
         elif generic_row is not None:

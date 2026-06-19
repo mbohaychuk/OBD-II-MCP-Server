@@ -15,6 +15,16 @@ from types import TracebackType
 
 DEFAULT_DB_PATH: Path = Path(str(files("obd_mcp") / "data" / "dtc.sqlite"))
 
+# The DB stores some brands under short names while NHTSA vPIC (the usual source
+# of `make`, via get_vehicle_info) returns the full marque. Without this the
+# manufacturer join silently no-ops for those brands. Keys are upper-cased.
+_MAKE_ALIASES: dict[str, str] = {
+    "CHEVROLET": "CHEVY",
+    "MERCEDES-BENZ": "MERCEDES",
+    "MERCEDES BENZ": "MERCEDES",
+    "VW": "VOLKSWAGEN",
+}
+
 
 @dataclass(frozen=True)
 class DtcDefinition:
@@ -39,9 +49,13 @@ class DtcDatabase:
         - `manufacturer="FORD"` → GENERIC row (if any) followed by the FORD row (if any).
 
         Both `code` and `manufacturer` are matched case-insensitively against
-        the upper-case values stored in the DB.
+        the upper-case values stored in the DB. A handful of full marque names
+        (e.g. "Chevrolet", "Mercedes-Benz") are aliased to the DB's short forms.
         """
         code_norm = code.upper()
+        if manufacturer is not None:
+            mfr_upper = manufacturer.upper()
+            manufacturer = _MAKE_ALIASES.get(mfr_upper, mfr_upper)
         if manufacturer is None:
             cursor = self._conn.execute(
                 "SELECT code, manufacturer, description, type, is_generic "
@@ -55,7 +69,7 @@ class DtcDatabase:
                 "FROM dtc_definitions "
                 "WHERE code = ? AND manufacturer IN ('GENERIC', ?) AND locale = ? "
                 "ORDER BY CASE manufacturer WHEN 'GENERIC' THEN 0 ELSE 1 END",
-                (code_norm, manufacturer.upper(), locale),
+                (code_norm, manufacturer, locale),
             )
         return [
             DtcDefinition(
