@@ -117,15 +117,18 @@ async def read_live_data(
 async def read_dtcs(
     ctx: Context,  # type: ignore[type-arg]
     scope: str = "all",
+    make: str | None = None,
 ) -> dict[str, Any]:
     """Read stored and/or pending DTCs. scope ∈ {"stored", "pending", "all"}.
 
-    Descriptions are joined from the bundled Wal33D DB (generic SAE
-    definitions); if a code has no generic entry we fall back to the wire
-    description from python-OBD.
+    Descriptions are joined from the bundled Wal33D DB. Each code carries a
+    `source` of "generic", "manufacturer", or "wire". Pass `make` (e.g. the
+    one `get_vehicle_info` decodes from the VIN) to resolve manufacturer-range
+    codes — many P1xxx codes have only a generic "Manufacturer Controlled DTC"
+    placeholder unless the make's own definition is consulted.
     """
     app = _app(ctx)
-    return await T.read_dtcs(app.client, scope=scope, dtc_db=app.dtc_db)
+    return await T.read_dtcs(app.client, scope=scope, dtc_db=app.dtc_db, manufacturer=make)
 
 
 @mcp.tool(

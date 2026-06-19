@@ -225,27 +225,50 @@ def _enrich_dtc(
     scope: str,
     wire_description: str,
     dtc_db: DtcDatabase | None,
+    manufacturer: str | None = None,
 ) -> dict[str, Any]:
+    """Join a raw DTC with a human description, recording its provenance.
+
+    With a `manufacturer`, a make-specific row wins over the generic one —
+    manufacturer-range codes (e.g. Ford P1xxx) often have only a useless
+    "Manufacturer Controlled DTC" generic placeholder, so preferring the
+    make's own definition is what makes the bundled per-brand data useful.
+    Falls back generic → wire. `source` is one of manufacturer/generic/wire,
+    or null when nothing resolved.
+    """
     description: str | None = None
+    source: str | None = None
     if dtc_db is not None:
-        rows = dtc_db.lookup(code)
-        if rows:
-            description = rows[0].description
+        rows = dtc_db.lookup(code, manufacturer=manufacturer)
+        mfr_row = next((r for r in rows if r.manufacturer != "GENERIC"), None)
+        generic_row = next((r for r in rows if r.manufacturer == "GENERIC"), None)
+        if mfr_row is not None:
+            description = mfr_row.description
+            source = "manufacturer"
+        elif generic_row is not None:
+            description = generic_row.description
+            source = "generic"
     if description is None and wire_description:
         description = wire_description
-    return {"code": code, "scope": scope, "description": description}
+        source = "wire"
+    return {"code": code, "scope": scope, "description": description, "source": source}
 
 
 async def read_dtcs(
     client: ObdClient,
     scope: str = "all",
     dtc_db: DtcDatabase | None = None,
+    manufacturer: str | None = None,
 ) -> dict[str, Any]:
     """Read stored / pending DTCs and join with the Wal33D description DB.
 
     `scope` ∈ {"stored", "pending", "all"}. Permanent DTCs (Mode 0A) are
     not implemented in Phase 1 — python-OBD has no built-in command for
     them and the simulator does not emit them either.
+
+    `manufacturer` (e.g. "Ford") opts the join into the make-specific rows so
+    manufacturer-range codes resolve to a real description instead of the
+    generic placeholder; omit it for generic-only decoding.
     """
     if scope not in DTC_SCOPES:
         raise ValueError(f"scope must be one of {sorted(DTC_SCOPES)}, got {scope!r}")
@@ -256,13 +279,13 @@ async def read_dtcs(
         resp = await client.query(obd.commands.GET_DTC)
         if not resp.is_null() and resp.value:
             for code, wire_desc in resp.value:
-                codes.append(_enrich_dtc(code, "stored", wire_desc, dtc_db))
+                codes.append(_enrich_dtc(code, "stored", wire_desc, dtc_db, manufacturer))
 
     if scope in {"pending", "all"}:
         resp = await client.query(obd.commands.GET_CURRENT_DTC)
         if not resp.is_null() and resp.value:
             for code, wire_desc in resp.value:
-                codes.append(_enrich_dtc(code, "pending", wire_desc, dtc_db))
+                codes.append(_enrich_dtc(code, "pending", wire_desc, dtc_db, manufacturer))
 
     return {
         "scope": scope,

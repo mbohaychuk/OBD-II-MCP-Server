@@ -112,6 +112,44 @@ async def test_read_dtcs_unknown_code_has_null_description() -> None:
     with DtcDatabase(DEFAULT_DB_PATH) as db:
         result = await read_dtcs(stub, scope="stored", dtc_db=db)  # type: ignore[arg-type]
     assert result["codes"][0]["description"] is None
+    assert result["codes"][0]["source"] is None
+
+
+@pytest.mark.asyncio
+async def test_read_dtcs_generic_code_reports_generic_source() -> None:
+    stub = _StubClient({"GET_DTC": [("P0420", "")]})
+    with DtcDatabase(DEFAULT_DB_PATH) as db:
+        result = await read_dtcs(stub, scope="stored", dtc_db=db)  # type: ignore[arg-type]
+    assert result["codes"][0]["description"] == (
+        "Catalyst System Efficiency Below Threshold Bank 1"
+    )
+    assert result["codes"][0]["source"] == "generic"
+
+
+@pytest.mark.asyncio
+async def test_read_dtcs_resolves_manufacturer_code_when_make_supplied() -> None:
+    """P1000 is a manufacturer-range code: its GENERIC row is the useless
+    'Manufacturer Controlled DTC' placeholder while the FORD row carries the
+    real meaning. Passing make=Ford must surface the manufacturer definition,
+    not the placeholder."""
+    stub = _StubClient({"GET_DTC": [("P1000", "")]})
+    with DtcDatabase(DEFAULT_DB_PATH) as db:
+        result = await read_dtcs(  # type: ignore[arg-type]
+            stub, scope="stored", dtc_db=db, manufacturer="Ford"
+        )
+    assert result["codes"][0]["description"] == "OBD System Readiness Test Not Complete"
+    assert result["codes"][0]["source"] == "manufacturer"
+
+
+@pytest.mark.asyncio
+async def test_read_dtcs_without_make_leaves_manufacturer_code_unresolved() -> None:
+    """Same P1000 with no make falls back to the generic placeholder, never the
+    Ford-specific text — manufacturer rows stay opt-in."""
+    stub = _StubClient({"GET_DTC": [("P1000", "wire text")]})
+    with DtcDatabase(DEFAULT_DB_PATH) as db:
+        result = await read_dtcs(stub, scope="stored", dtc_db=db)  # type: ignore[arg-type]
+    assert result["codes"][0]["description"] != "OBD System Readiness Test Not Complete"
+    assert result["codes"][0]["source"] == "generic"
 
 
 @pytest.mark.asyncio
