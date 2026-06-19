@@ -1,11 +1,21 @@
 """Async facade over python-OBD.
 
 python-OBD is thread-based and blocking. MCP tool handlers are asyncio
-coroutines. Every call into python-OBD is pushed onto the default
-executor via `run_in_executor`. Two locks guard it: `_conn_lock`
-serializes connection setup/teardown, and `_io_lock` serializes queries.
-Teardown takes both, in that order, so close() cannot run concurrently
-with an in-flight query() on the same connection.
+coroutines. The two calls that touch the serial port — `query()` and the
+OBD-close inside teardown — are pushed onto the default executor via
+`run_in_executor`; the cheap metadata accessors (`supported_commands`,
+`supports`, `status`, `protocol_name`, `port_name`) read python-OBD's
+in-memory state directly on the loop thread, since they do no serial I/O.
+
+Two locks guard the connection: `_conn_lock` serializes setup/teardown,
+and `_io_lock` serializes the executor-side serial I/O. Teardown's
+OBD-close runs under `_io_lock`, so it cannot overlap the I/O of an
+in-flight `query()` that also holds `_io_lock`. It is *not* full mutual
+exclusion: a `query()` whose `_get_connection()` has already returned can
+still race a concurrent `close()` — but python-OBD's `query()` on a closed
+connection returns a null response rather than raising, so the worst case
+is a benign null read, never a crash. In practice `close()` is only called
+at lifespan shutdown, so the window is untriggerable in normal operation.
 """
 
 from __future__ import annotations
@@ -99,19 +109,28 @@ class ObdClient:
         `OBD` object with a text status. We coerce that text into the two
         reachable connection-level ObdError codes (UNABLE_TO_CONNECT,
         BUS_INIT_ERROR); see errors.py.
+
+        CAR_CONNECTED is the single success predicate, deliberately matching
+        python-OBD's `is_connected()` (true only for CAR_CONNECTED). If this
+        assert accepted a lesser status (ELM_CONNECTED, or OBD_CONNECTED when
+        `check_voltage` is on), it would pass while `is_connected()` stays
+        false, sending `_get_connection()` into a teardown/reconnect loop.
         """
         status = str(conn.status())
+        if status == OBDStatus.CAR_CONNECTED:
+            return
         if status == OBDStatus.NOT_CONNECTED:
             raise ObdError(
                 ObdErrorCode.UNABLE_TO_CONNECT,
                 f"adapter not reachable at {self._portstr}",
             )
-        if status == OBDStatus.ELM_CONNECTED:
-            # ELM327 responded but couldn't initialize the CAN/K-line bus.
-            raise ObdError(
-                ObdErrorCode.BUS_INIT_ERROR,
-                "adapter is alive but failed to initialize the vehicle bus",
-            )
+        # ELM_CONNECTED (bus init failed) and OBD_CONNECTED (adapter on the bus
+        # but the car isn't fully answering, e.g. ignition off) both mean the
+        # link is up but unusable for queries.
+        raise ObdError(
+            ObdErrorCode.BUS_INIT_ERROR,
+            f"adapter is alive but the vehicle bus is not fully connected ({status})",
+        )
 
     async def query(self, command: OBDCommand) -> OBDResponse:
         conn = await self._get_connection()

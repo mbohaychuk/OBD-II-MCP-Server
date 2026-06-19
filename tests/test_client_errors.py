@@ -42,6 +42,16 @@ def test_assert_connected_maps_not_connected_to_unable_to_connect() -> None:
     assert exc_info.value.code is ObdErrorCode.UNABLE_TO_CONNECT
 
 
+def test_assert_connected_maps_obd_connected_to_bus_init_error() -> None:
+    """OBD_CONNECTED (adapter on the bus, car not fully answering) must raise,
+    not pass: is_connected() is true only for CAR_CONNECTED, so letting it
+    through the assert would diverge from the reconnect predicate and loop."""
+    client = ObdClient(portstr="socket://unused")
+    with pytest.raises(ObdError) as exc_info:
+        client._assert_connected(_FakeStatusConn(OBDStatus.OBD_CONNECTED))  # type: ignore[arg-type]
+    assert exc_info.value.code is ObdErrorCode.BUS_INIT_ERROR
+
+
 def test_assert_connected_passes_when_car_connected() -> None:
     client = ObdClient(portstr="socket://unused")
     client._assert_connected(_FakeStatusConn(OBDStatus.CAR_CONNECTED))  # type: ignore[arg-type]
