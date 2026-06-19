@@ -14,7 +14,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from mcp.server.elicitation import AcceptedElicitation
 from mcp.server.fastmcp import Context, FastMCP
@@ -24,6 +24,18 @@ from pydantic import BaseModel, Field
 from obd_mcp import tools as T
 from obd_mcp.client import ObdClient
 from obd_mcp.dtc_db import DtcDatabase
+from obd_mcp.schemas import (
+    ClearDtcsResult,
+    DtcReport,
+    FreezeFrame,
+    LiveReading,
+    ManufacturerSignals,
+    ReadinessReport,
+    RecallsAndComplaints,
+    SessionRecording,
+    SupportedPid,
+    VehicleInfo,
+)
 
 DEFAULT_PORT_URL = "socket://localhost:35000"
 
@@ -108,33 +120,33 @@ def ping() -> str:
     # openWorldHint: reaches NHTSA vPIC to decode the VIN.
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
 )
-async def get_vehicle_info(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
+async def get_vehicle_info(ctx: Context) -> VehicleInfo:  # type: ignore[type-arg]
     """VIN, calibration IDs, protocol, adapter voltage, and link status.
 
     Fields the ECU or adapter doesn't report come back as null.
     """
-    return await T.get_vehicle_info(_app(ctx).client)
+    return cast(VehicleInfo, await T.get_vehicle_info(_app(ctx).client))
 
 
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
 )
-async def list_supported_pids(ctx: Context) -> list[dict[str, str]]:  # type: ignore[type-arg]
+async def list_supported_pids(ctx: Context) -> list[SupportedPid]:  # type: ignore[type-arg]
     """List Mode 01 PIDs the connected ECU advertises support for."""
-    return await T.list_supported_pids(_app(ctx).client)
+    return cast(list[SupportedPid], await T.list_supported_pids(_app(ctx).client))
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
 async def read_live_data(
     ctx: Context,  # type: ignore[type-arg]
     pids: list[str],
-) -> list[dict[str, Any]]:
+) -> list[LiveReading]:
     """Snapshot-read one or more Mode 01 PIDs by name (e.g. ["RPM", "SPEED"]).
 
     Unknown or unsupported PIDs are surfaced as structured error entries,
     not exceptions. Each reading carries its own timestamp.
     """
-    return await T.read_live_data(_app(ctx).client, pids)
+    return cast(list[LiveReading], await T.read_live_data(_app(ctx).client, pids))
 
 
 @mcp.tool(
@@ -144,7 +156,7 @@ async def read_dtcs(
     ctx: Context,  # type: ignore[type-arg]
     scope: str = "all",
     make: str | None = None,
-) -> dict[str, Any]:
+) -> DtcReport:
     """Read stored and/or pending DTCs. scope ∈ {"stored", "pending", "all"}.
 
     Descriptions are joined from the bundled Wal33D DB. Each code carries a
@@ -154,7 +166,9 @@ async def read_dtcs(
     placeholder unless the make's own definition is consulted.
     """
     app = _app(ctx)
-    return await T.read_dtcs(app.client, scope=scope, dtc_db=app.dtc_db, manufacturer=make)
+    return cast(
+        DtcReport, await T.read_dtcs(app.client, scope=scope, dtc_db=app.dtc_db, manufacturer=make)
+    )
 
 
 @mcp.tool(
@@ -163,20 +177,20 @@ async def read_dtcs(
 async def read_freeze_frame(
     ctx: Context,  # type: ignore[type-arg]
     frame_index: int = 0,
-) -> dict[str, Any]:
+) -> FreezeFrame:
     """Mode 02 snapshot of sensor state at the moment a DTC was set.
 
     Pair with `read_dtcs` to explain what the engine was doing when a code
     triggered: RPM, speed, coolant temp, fuel trims, etc. Only `frame_index=0`
     (most recent frame) is supported in this release.
     """
-    return await T.read_freeze_frame(_app(ctx).client, frame_index=frame_index)
+    return cast(FreezeFrame, await T.read_freeze_frame(_app(ctx).client, frame_index=frame_index))
 
 
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
 )
-async def read_readiness_monitors(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
+async def read_readiness_monitors(ctx: Context) -> ReadinessReport:  # type: ignore[type-arg]
     """Emissions-readiness monitor completion status.
 
     Returns every applicable monitor with complete=true/false. An
@@ -184,7 +198,7 @@ async def read_readiness_monitors(ctx: Context) -> dict[str, Any]:  # type: igno
     vehicle in an emissions-inspection-failing state until driven enough
     for that monitor to re-run.
     """
-    return await T.read_readiness_monitors(_app(ctx).client)
+    return cast(ReadinessReport, await T.read_readiness_monitors(_app(ctx).client))
 
 
 class _ClearDtcsConfirmation(BaseModel):
@@ -212,7 +226,7 @@ async def record_session(
     duration_s: float,
     pids: list[str],
     hz_target: float = 1.0,
-) -> dict[str, Any]:
+) -> SessionRecording:
     """Record a time-bounded sample of one or more PIDs.
 
     Streams progress via MCP progress notifications. The full timeseries
@@ -235,7 +249,7 @@ async def record_session(
         progress=_emit,
     )
     _SESSIONS[result["session_id"]] = result
-    return result
+    return cast(SessionRecording, result)
 
 
 @mcp.tool(
@@ -247,7 +261,7 @@ async def list_manufacturer_signals(
     make: str,
     model: str,
     year: int | None = None,
-) -> dict[str, Any]:
+) -> ManufacturerSignals:
     """Bundled manufacturer-specific Mode 22 signal catalogue.
 
     Returns the OBDb signal list for Ford Mustang and F-150 (the dev
@@ -257,7 +271,9 @@ async def list_manufacturer_signals(
     vehicles return an in-band `{available: false, reason:
     "NO_SIGNAL_SET"}`; generic Mode 01 via `read_live_data` still works.
     """
-    return await T.list_manufacturer_signals(year=year, make=make, model=model)
+    return cast(
+        ManufacturerSignals, await T.list_manufacturer_signals(year=year, make=make, model=model)
+    )
 
 
 @mcp.tool(
@@ -269,7 +285,7 @@ async def lookup_recalls_and_complaints(
     year: int,
     make: str,
     model: str,
-) -> dict[str, Any]:
+) -> RecallsAndComplaints:
     """NHTSA safety recalls and consumer complaints for a year/make/model.
 
     Recalls are binding safety campaigns; complaints are unverified owner
@@ -278,7 +294,10 @@ async def lookup_recalls_and_complaints(
     investigations are not available — NHTSA's public API does not serve
     them.
     """
-    return await T.lookup_recalls_and_complaints(year=year, make=make, model=model)
+    return cast(
+        RecallsAndComplaints,
+        await T.lookup_recalls_and_complaints(year=year, make=make, model=model),
+    )
 
 
 def _elicitation_approved(result: object) -> bool:
@@ -296,7 +315,7 @@ def _elicitation_approved(result: object) -> bool:
         openWorldHint=False,
     ),
 )
-async def clear_dtcs(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
+async def clear_dtcs(ctx: Context) -> ClearDtcsResult:  # type: ignore[type-arg]
     """Clear stored DTCs and freeze-frame data (Mode 04).
 
     Destructive: resets emissions readiness monitors. The client is asked
@@ -319,7 +338,7 @@ async def clear_dtcs(ctx: Context) -> dict[str, Any]:  # type: ignore[type-arg]
         result = await ctx.elicit(message=message, schema=_ClearDtcsConfirmation)
         return _elicitation_approved(result)
 
-    return await T.clear_dtcs(_app(ctx).client, confirm)
+    return cast(ClearDtcsResult, await T.clear_dtcs(_app(ctx).client, confirm))
 
 
 def main() -> None:
