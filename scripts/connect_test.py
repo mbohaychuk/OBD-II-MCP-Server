@@ -1,7 +1,7 @@
 """Standalone OBD-II connection test — run this AT the car, on the adapter's WiFi.
 
 It connects to the adapter, prints a readable report, and saves a full JSON
-snapshot to /tmp that you can hand back to Claude once you're on normal WiFi.
+snapshot to /tmp that you can review once you're back on normal WiFi.
 
   OBD_PORT defaults to the Vgate iCar Pro WiFi default (socket://192.168.0.10:35000).
   Override:  OBD_PORT=socket://<ip>:<port> uv run python scripts/connect_test.py
@@ -92,7 +92,7 @@ async def main() -> None:
     with open(fname, "w") as f:
         json.dump(out, f, indent=2, default=str)
     print(f"\nSaved full snapshot to {fname}")
-    print("Rejoin your normal WiFi and share that file with me to dig into the results.")
+    print("Rejoin your normal WiFi and inspect that file to dig into the results.")
 
 
 asyncio.run(main())
