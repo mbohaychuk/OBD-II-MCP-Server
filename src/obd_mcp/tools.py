@@ -148,11 +148,20 @@ async def list_supported_pids(client: ObdClient) -> list[dict[str, str]]:
     ]
 
 
+# Modes read_live_data is allowed to dispatch: 01 (live sensor PIDs) and 09
+# (vehicle info — VIN, calibration IDs). Every other mode is either destructive
+# (Mode 04 CLEAR_DTC) or already has a dedicated tool (Mode 03/07 DTC reads,
+# Mode 02 freeze frame). Gating here keeps the one destructive command behind
+# clear_dtcs's elicitation instead of reachable as a "PID".
+_READABLE_MODES: frozenset[int] = frozenset({1, 9})
+
+
 async def read_live_data(client: ObdClient, pids: list[str]) -> list[dict[str, Any]]:
-    """Snapshot reading of one or more Mode 01 PIDs, decoded.
+    """Snapshot reading of one or more Mode 01/09 PIDs, decoded.
 
     For each name in `pids`:
       - unknown name → {error: "UNKNOWN_PID"}
+      - known but not a Mode 01/09 read → {error: "NOT_A_READABLE_PID"}
       - known but not advertised by ECU → {error: "NOT_SUPPORTED"}
       - query returned nothing → {error: "NO_DATA"}
       - success → {value, unit}  (unit may be null for non-dimensional values)
@@ -165,6 +174,11 @@ async def read_live_data(client: ObdClient, pids: list[str]) -> list[dict[str, A
             continue
         cmd = obd.commands[name]
         pid_hex = cmd.command.decode("ascii")
+        if cmd.mode not in _READABLE_MODES:
+            results.append(
+                {"pid": pid_hex, "name": name, "error": "NOT_A_READABLE_PID", "timestamp": now}
+            )
+            continue
         if not await client.supports(cmd):
             results.append(
                 {"pid": pid_hex, "name": name, "error": "NOT_SUPPORTED", "timestamp": now}
@@ -452,6 +466,10 @@ async def record_session(
     unknown = [p for p in pids if not obd.commands.has_name(p)]
     if unknown:
         raise ValueError(f"unknown PID name(s): {', '.join(unknown)}")
+
+    not_readable = [p for p in pids if obd.commands[p].mode not in _READABLE_MODES]
+    if not_readable:
+        raise ValueError(f"not a readable Mode 01/09 PID: {', '.join(not_readable)}")
 
     session_id = uuid.uuid4().hex[:12]
     interval = 1.0 / hz_target

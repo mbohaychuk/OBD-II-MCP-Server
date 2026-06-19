@@ -2,10 +2,71 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import obd
 import pytest
 
 from obd_mcp.client import ObdClient
 from obd_mcp.tools import list_supported_pids, read_live_data
+
+
+class _NullResponse:
+    value = None
+
+    def is_null(self) -> bool:
+        return True
+
+
+class _RecordingClient:
+    """Stub client that records every command it is asked about, so a test
+    can prove a PID was rejected *before* any wire I/O was attempted."""
+
+    def __init__(self) -> None:
+        self.supports_checked: list[str] = []
+        self.queried: list[str] = []
+
+    async def supports(self, command: Any) -> bool:
+        self.supports_checked.append(command.name)
+        return True
+
+    async def query(self, command: Any) -> _NullResponse:
+        self.queried.append(command.name)
+        return _NullResponse()
+
+
+@pytest.mark.asyncio
+async def test_read_live_data_rejects_destructive_command_without_querying() -> None:
+    """CLEAR_DTC (Mode 04) is a registered command and python-OBD reports it
+    as supported on every connection, so without a mode gate read_live_data
+    would dispatch a destructive erase straight to the bus — around the
+    elicitation that clear_dtcs enforces. It must be refused in-band instead."""
+    client = _RecordingClient()
+    readings = await read_live_data(client, ["CLEAR_DTC"])  # type: ignore[arg-type]
+    assert readings[0]["name"] == "CLEAR_DTC"
+    assert readings[0]["error"] == "NOT_A_READABLE_PID"
+    assert client.queried == []
+    assert client.supports_checked == []
+
+
+@pytest.mark.asyncio
+async def test_read_live_data_rejects_non_readable_modes() -> None:
+    """Mode 03 (GET_DTC) and AT commands (ELM_VOLTAGE) have dedicated tools or
+    no business in a live-data read; only Mode 01/09 reads are admitted."""
+    client = _RecordingClient()
+    readings = await read_live_data(client, ["GET_DTC", "ELM_VOLTAGE"])  # type: ignore[arg-type]
+    assert {r["error"] for r in readings} == {"NOT_A_READABLE_PID"}
+    assert client.queried == []
+
+
+@pytest.mark.asyncio
+async def test_read_live_data_admits_mode_09() -> None:
+    """VIN (Mode 09) passes the mode gate — it is a read, just an unusual one;
+    the supports() check (not the gate) decides whether the ECU answers."""
+    assert obd.commands["VIN"].mode == 9
+    client = _RecordingClient()
+    await read_live_data(client, ["VIN"])  # type: ignore[arg-type]
+    assert client.supports_checked == ["VIN"]
 
 
 @pytest.mark.asyncio
