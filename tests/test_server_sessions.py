@@ -53,9 +53,11 @@ async def test_session_resource_read_unknown_id_raises() -> None:
 
 
 @pytest.mark.asyncio
-async def test_record_session_tool_registered_with_readonly_annotation() -> None:
+async def test_record_session_tool_registered_as_non_read_only() -> None:
+    # record_session persists state (a session + obd:// resource), so it is
+    # not read-only; the annotation must say so.
     tools = await mcp.list_tools()
     record = next((t for t in tools if t.name == "record_session"), None)
     assert record is not None
     assert record.annotations is not None
-    assert record.annotations.readOnlyHint is True
+    assert record.annotations.readOnlyHint is False

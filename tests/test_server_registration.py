@@ -54,10 +54,50 @@ async def test_read_tools_are_marked_read_only() -> None:
         "read_dtcs",
         "read_freeze_frame",
         "read_readiness_monitors",
-        "record_session",
         "list_manufacturer_signals",
         "lookup_recalls_and_complaints",
     ):
         ann = by_name[name].annotations
         assert ann is not None, name
         assert ann.readOnlyHint is True, name
+
+
+@pytest.mark.asyncio
+async def test_only_nhtsa_tools_are_open_world() -> None:
+    """openWorldHint must distinguish the two tools that reach the internet
+    (NHTSA) from the rest, which only talk to the local adapter / bundled data."""
+    tools = await mcp.list_tools()
+    open_world = {t.name for t in tools if t.annotations and t.annotations.openWorldHint}
+    assert open_world == {"get_vehicle_info", "lookup_recalls_and_complaints"}
+    # Everything else is explicitly closed-world, not left at the SDK default.
+    for t in tools:
+        assert t.annotations is not None and t.annotations.openWorldHint is not None, t.name
+
+
+@pytest.mark.asyncio
+async def test_server_exposes_orchestration_instructions() -> None:
+    assert mcp.instructions
+    lowered = mcp.instructions.lower()
+    assert "elicitation" in lowered and "get_vehicle_info" in lowered
+
+
+@pytest.mark.asyncio
+async def test_session_resource_template_has_metadata() -> None:
+    """The obd:// resource is published with a human name + description, not the
+    decorated function's internal _session_resource identifier."""
+    templates = await mcp.list_resource_templates()
+    session = next(t for t in templates if "sessions" in t.uriTemplate)
+    assert session.name == "obd_session"
+    assert session.description
+
+
+@pytest.mark.asyncio
+async def test_record_session_is_not_read_only() -> None:
+    """record_session persists a session and mints an obd:// resource, so it
+    modifies server state — readOnlyHint must be false (but not destructive)."""
+    tools = await mcp.list_tools()
+    rec = next(t for t in tools if t.name == "record_session")
+    assert rec.annotations is not None
+    assert rec.annotations.readOnlyHint is False
+    assert rec.annotations.destructiveHint is False
+    assert rec.annotations.idempotentHint is False

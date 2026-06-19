@@ -60,6 +60,15 @@ def test_lookup_manufacturer_is_case_insensitive(db: DtcDatabase) -> None:
     assert upper == lower
 
 
+def test_lookup_aliases_full_marque_to_db_short_name(db: DtcDatabase) -> None:
+    """NHTSA returns full marques (e.g. 'Chevrolet', 'Mercedes-Benz') while the
+    DB stores 'CHEVY' / 'MERCEDES'; the alias makes the join resolve instead of
+    silently returning generic-only."""
+    via_alias = db.lookup("P1450", manufacturer="Chevrolet")
+    assert "CHEVY" in {r.manufacturer for r in via_alias}
+    assert via_alias == db.lookup("P1450", manufacturer="CHEVY")
+
+
 def test_lookup_unknown_code_returns_empty_list(db: DtcDatabase) -> None:
     assert db.lookup("ZZZZZ") == []
 

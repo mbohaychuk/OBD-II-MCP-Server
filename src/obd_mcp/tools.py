@@ -34,8 +34,19 @@ DTC_SCOPES: frozenset[str] = frozenset({"stored", "pending", "all"})
 RECORD_MAX_DURATION_S: float = 600.0
 RECORD_MAX_HZ: float = 20.0
 
+
+class ElicitationUnsupported(Exception):
+    """Raised by a `ConfirmFn` when the host cannot ask the user at all
+    (it does not support MCP elicitation). Distinct from the user actively
+    declining — both refuse the destructive op, but only this one means
+    "no prompt was ever shown," so the caller can tell the user to switch
+    to a host that supports confirmation rather than "you declined.\""""
+
+
 # confirmer for destructive tools: receives the human-readable warning and the
-# list of incomplete monitor names; returns True iff the user/agent approves.
+# list of incomplete monitor names; returns True iff the user/agent approves,
+# False if the user declines, or raises ElicitationUnsupported if the host
+# cannot present the prompt.
 ConfirmFn = Callable[[str, list[str]], Awaitable[bool]]
 
 # Progress callback for long-running tools. Current and total are sample
@@ -47,7 +58,12 @@ def _serialize_value(value: Any) -> Any:
     """Coerce a python-OBD response value to something JSON-safe.
 
     - pint Quantity → {"magnitude": float, "unit": str}
-    - Status / list / scalar → passed through
+    - list / tuple → recursively serialized
+    - bytes → decoded text
+    - JSON scalar (str/int/float/bool/None) → passed through
+    - anything else (e.g. python-OBD's Status object, returned by Mode 01 PID
+      01) → its string form, so it can never break JSON serialization at the
+      MCP boundary.
     """
     if value is None:
         return None
@@ -60,7 +76,9 @@ def _serialize_value(value: Any) -> Any:
         return [_serialize_value(v) for v in value]
     if isinstance(value, (bytes, bytearray)):
         return value.decode("utf-8", errors="replace")
-    return value
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 def _decode_vin(resp: Any) -> str | None:
@@ -148,51 +166,82 @@ async def list_supported_pids(client: ObdClient) -> list[dict[str, str]]:
     ]
 
 
-async def read_live_data(client: ObdClient, pids: list[str]) -> list[dict[str, Any]]:
-    """Snapshot reading of one or more Mode 01 PIDs, decoded.
+# Modes read_live_data is allowed to dispatch: 01 (live sensor PIDs) and 09
+# (vehicle info — VIN, calibration IDs). Every other mode is either destructive
+# (Mode 04 CLEAR_DTC) or already has a dedicated tool (Mode 03/07 DTC reads,
+# Mode 02 freeze frame). Gating here keeps the one destructive command behind
+# clear_dtcs's elicitation instead of reachable as a "PID".
+_READABLE_MODES: frozenset[int] = frozenset({1, 9})
 
-    For each name in `pids`:
-      - unknown name → {error: "UNKNOWN_PID"}
-      - known but not advertised by ECU → {error: "NOT_SUPPORTED"}
-      - query returned nothing → {error: "NO_DATA"}
-      - success → {value, unit}  (unit may be null for non-dimensional values)
+
+def _live_entry(
+    pid: str | None,
+    name: str,
+    *,
+    value: Any = None,
+    unit: str | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """A read_live_data row. Every row carries the same keys so callers never
+    have to probe whether `value` or `error` is present: on success `error` is
+    null; on failure `value`/`unit` are null."""
+    return {
+        "pid": pid,
+        "name": name,
+        "value": value,
+        "unit": unit,
+        "error": error,
+        "timestamp": time.time(),
+    }
+
+
+async def read_live_data(client: ObdClient, pids: list[str]) -> list[dict[str, Any]]:
+    """Snapshot reading of one or more Mode 01/09 PIDs, decoded.
+
+    Returns one uniform row per requested name (keys: pid, name, value, unit,
+    error, timestamp). Exactly one of `value`/`error` is meaningful:
+      - unknown name → error="UNKNOWN_PID"
+      - known but not a Mode 01/09 read → error="NOT_A_READABLE_PID"
+      - known but not advertised by ECU → error="NOT_SUPPORTED"
+      - query returned nothing → error="NO_DATA"
+      - success → value (+ unit, null for non-dimensional values), error=null
     """
     results: list[dict[str, Any]] = []
     for name in pids:
-        now = time.time()
         if not obd.commands.has_name(name):
-            results.append({"pid": None, "name": name, "error": "UNKNOWN_PID", "timestamp": now})
+            results.append(_live_entry(None, name, error="UNKNOWN_PID"))
             continue
         cmd = obd.commands[name]
         pid_hex = cmd.command.decode("ascii")
+        if cmd.mode not in _READABLE_MODES:
+            results.append(_live_entry(pid_hex, name, error="NOT_A_READABLE_PID"))
+            continue
         if not await client.supports(cmd):
-            results.append(
-                {"pid": pid_hex, "name": name, "error": "NOT_SUPPORTED", "timestamp": now}
-            )
+            results.append(_live_entry(pid_hex, name, error="NOT_SUPPORTED"))
             continue
         resp = await client.query(cmd)
         if resp.is_null():
-            results.append(
-                {"pid": pid_hex, "name": name, "error": "NO_DATA", "timestamp": time.time()}
-            )
+            results.append(_live_entry(pid_hex, name, error="NO_DATA"))
             continue
         serialized = _serialize_value(resp.value)
         if isinstance(serialized, dict) and "magnitude" in serialized and "unit" in serialized:
-            value: Any = serialized["magnitude"]
-            unit: str | None = serialized["unit"]
+            results.append(
+                _live_entry(pid_hex, name, value=serialized["magnitude"], unit=serialized["unit"])
+            )
         else:
-            value = serialized
-            unit = None
-        results.append(
-            {
-                "pid": pid_hex,
-                "name": name,
-                "value": value,
-                "unit": unit,
-                "timestamp": time.time(),
-            }
-        )
+            results.append(_live_entry(pid_hex, name, value=serialized))
     return results
+
+
+def _is_generic_range(code: str) -> bool:
+    """Whether a DTC is in the ISO/SAE generic range vs the manufacturer range.
+
+    Per SAE J2012 the second character (first digit after the system letter)
+    encodes the authority: 0 and 2 are ISO/SAE-controlled (generic), 1 and 3 are
+    manufacturer-controlled. So the *same* P1xxx code means different things per
+    make, while a P0xxx code has one canonical generic definition.
+    """
+    return len(code) >= 2 and code[1] in ("0", "2")
 
 
 def _enrich_dtc(
@@ -200,27 +249,52 @@ def _enrich_dtc(
     scope: str,
     wire_description: str,
     dtc_db: DtcDatabase | None,
+    manufacturer: str | None = None,
 ) -> dict[str, Any]:
+    """Join a raw DTC with a human description, recording its provenance.
+
+    For a generic-range code the canonical SAE definition wins. For a
+    manufacturer-range code the make-specific row wins when a `manufacturer` is
+    supplied (this is what decodes codes like Ford P1xxx) — otherwise it falls
+    back to whatever generic row exists, then the wire description. `source` is
+    manufacturer/generic/wire, or null when nothing resolved.
+    """
     description: str | None = None
+    source: str | None = None
     if dtc_db is not None:
-        rows = dtc_db.lookup(code)
-        if rows:
-            description = rows[0].description
+        rows = dtc_db.lookup(code, manufacturer=manufacturer)
+        mfr_row = next((r for r in rows if r.manufacturer != "GENERIC"), None)
+        generic_row = next((r for r in rows if r.manufacturer == "GENERIC"), None)
+        if generic_row is not None and _is_generic_range(code):
+            description = generic_row.description
+            source = "generic"
+        elif mfr_row is not None:
+            description = mfr_row.description
+            source = "manufacturer"
+        elif generic_row is not None:
+            description = generic_row.description
+            source = "generic"
     if description is None and wire_description:
         description = wire_description
-    return {"code": code, "scope": scope, "description": description}
+        source = "wire"
+    return {"code": code, "scope": scope, "description": description, "source": source}
 
 
 async def read_dtcs(
     client: ObdClient,
     scope: str = "all",
     dtc_db: DtcDatabase | None = None,
+    manufacturer: str | None = None,
 ) -> dict[str, Any]:
     """Read stored / pending DTCs and join with the Wal33D description DB.
 
     `scope` ∈ {"stored", "pending", "all"}. Permanent DTCs (Mode 0A) are
     not implemented in Phase 1 — python-OBD has no built-in command for
     them and the simulator does not emit them either.
+
+    `manufacturer` (e.g. "Ford") opts the join into the make-specific rows so
+    manufacturer-range codes resolve to a real description instead of the
+    generic placeholder; omit it for generic-only decoding.
     """
     if scope not in DTC_SCOPES:
         raise ValueError(f"scope must be one of {sorted(DTC_SCOPES)}, got {scope!r}")
@@ -231,13 +305,13 @@ async def read_dtcs(
         resp = await client.query(obd.commands.GET_DTC)
         if not resp.is_null() and resp.value:
             for code, wire_desc in resp.value:
-                codes.append(_enrich_dtc(code, "stored", wire_desc, dtc_db))
+                codes.append(_enrich_dtc(code, "stored", wire_desc, dtc_db, manufacturer))
 
     if scope in {"pending", "all"}:
         resp = await client.query(obd.commands.GET_CURRENT_DTC)
         if not resp.is_null() and resp.value:
             for code, wire_desc in resp.value:
-                codes.append(_enrich_dtc(code, "pending", wire_desc, dtc_db))
+                codes.append(_enrich_dtc(code, "pending", wire_desc, dtc_db, manufacturer))
 
     return {
         "scope": scope,
@@ -388,11 +462,25 @@ async def clear_dtcs(client: ObdClient, confirm: ConfirmFn) -> dict[str, Any]:
     Gated by a runtime confirmation via the `confirm` callback. The callback
     is expected to surface the readiness-monitor warning to the user (via
     MCP elicitation in production; a test shim in the unit suite).
+
+    Fail-closed: Mode 04 is sent only on an affirmative confirm. A declined
+    confirm returns `reason="user_declined"`; a host that cannot present the
+    prompt at all (no elicitation support) returns
+    `reason="elicitation_unsupported"` so the caller can redirect the user to
+    a supported host rather than mislabel it a decline.
     """
     readiness = await read_readiness_monitors(client)
     prompt, incomplete = _build_clear_dtcs_prompt(readiness)
 
-    approved = await confirm(prompt, incomplete)
+    try:
+        approved = await confirm(prompt, incomplete)
+    except ElicitationUnsupported:
+        return {
+            "cleared": False,
+            "reason": "elicitation_unsupported",
+            "readiness_before": readiness,
+            "timestamp": time.time(),
+        }
     if not approved:
         return {
             "cleared": False,
@@ -453,6 +541,10 @@ async def record_session(
     if unknown:
         raise ValueError(f"unknown PID name(s): {', '.join(unknown)}")
 
+    not_readable = [p for p in pids if obd.commands[p].mode not in _READABLE_MODES]
+    if not_readable:
+        raise ValueError(f"not a readable Mode 01/09 PID: {', '.join(not_readable)}")
+
     session_id = uuid.uuid4().hex[:12]
     interval = 1.0 / hz_target
     started_at = time.time()
@@ -477,7 +569,10 @@ async def record_session(
         now = time.time()
         samples.append({"t": now - started_at, "readings": readings})
         if progress is not None:
-            await progress(len(samples), target_count)
+            # target_count is hz×duration; a fast adapter or scheduler jitter can
+            # squeeze in an extra sample past it, so clamp to avoid >100% in hosts
+            # that render current/total as a percentage.
+            await progress(min(len(samples), target_count), target_count)
         next_t = max(next_t + interval, now)
 
     return {

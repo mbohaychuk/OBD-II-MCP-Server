@@ -6,6 +6,12 @@ Format: **Context · Decision · Why**.
 
 ---
 
+## 2026-06-19 — DTC description resolution: SAE-range-aware, make-specific opt-in
+
+**Context.** The bundled Wal33D DB holds 9,390 manufacturer-specific rows across 33 brands, but `read_dtcs` only ever joined the GENERIC row, so make-specific codes were unreachable. Threading a `make` through raised two subtleties: (1) NHTSA vPIC (the usual `make` source) returns full marques like "Chevrolet"/"Mercedes-Benz" while the DB stores "CHEVY"/"MERCEDES", so a naive join silently no-ops; (2) for a generic-range code (e.g. P0420) the canonical SAE definition is better than a manufacturer's elaboration, but for a manufacturer-range code (e.g. P1xxx) the same code means different things per make, so the make's row is authoritative.
+**Decision.** `read_dtcs(make=…)` resolves descriptions by SAE J2012 code range: the second character selects authority (0/2 = ISO/SAE generic, 1/3 = manufacturer). For a generic-range code the GENERIC row wins; for a manufacturer-range code the make-specific row wins when a `make` is supplied, else it falls back to whatever GENERIC row exists, then the wire text. Each code reports a `source` of generic/manufacturer/wire. A small alias map (CHEVROLET→CHEVY, MERCEDES-BENZ→MERCEDES, VW→VOLKSWAGEN) normalizes full marques to the DB's short names. With no `make`, behavior is unchanged (generic-only) — manufacturer rows stay opt-in.
+**Why.** Range-awareness is the standard, data-independent way to decide whose definition is canonical, and it avoids degrading generic codes (preferring the manufacturer row outright returned Audi's wording for P0420 over the SAE text). The alias map is what makes the feature actually fire for the brands NHTSA spells differently — without it the headline "manufacturer codes decode" claim would be silently false for several makes.
+
 ## 2026-06-18 — Remove `lookup_repair_info` / Sidekick coupling — `obd-mcp` stays consumer-agnostic
 
 **Context.** The 2026-04-23 entry added a `lookup_repair_info` tool that, when `SIDEKICK_URL` was set, proxied DTC lookups to a Mechanics Sidekick RAG endpoint. That baked knowledge of a specific consumer (Sidekick) and of repair-manual RAG into `obd-mcp` — contradicting the project's own composability stance (a dumb OBD-II reader that knows nothing about who's calling it; cf. the 2026-04-22 "no bespoke UI on obd-mcp" entry).
@@ -136,7 +142,7 @@ Format: **Context · Decision · Why**.
 
 **Context.** SAE J2012 is paywalled. Community DTC datasets vary in coverage and freshness.
 **Decision.** Vendor `Wal33D/dtc-database` as a SQLite snapshot in `data/`.
-**Why.** 28,220 codes (9,415 generic + 18,805 manufacturer-specific across 33 brands), MIT, last push Feb 2026. Best license + coverage + maintenance combination found.
+**Why.** 18,805 codes (9,415 generic + 9,390 manufacturer-specific across 33 brands — `SELECT COUNT(*)` on the bundled snapshot; pinned commit in `data/dtc.sqlite.source`), MIT, last push Feb 2026. Best license + coverage + maintenance combination found.
 
 ## 2026-04-22 — Repair-knowledge RAG: user-supplied via Mechanics Sidekick
 

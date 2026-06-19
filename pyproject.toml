@@ -44,7 +44,8 @@ dependencies = [
 Homepage = "https://github.com/mbohaychuk/OBD-II-MCP-Server"
 Repository = "https://github.com/mbohaychuk/OBD-II-MCP-Server"
 Issues = "https://github.com/mbohaychuk/OBD-II-MCP-Server/issues"
-Changelog = "https://github.com/mbohaychuk/OBD-II-MCP-Server/blob/main/docs/DECISIONS.md"
+Changelog = "https://github.com/mbohaychuk/OBD-II-MCP-Server/releases"
+"Design notes" = "https://github.com/mbohaychuk/OBD-II-MCP-Server/blob/main/docs/DECISIONS.md"
 
 [project.scripts]
 obd-mcp = "obd_mcp.server:main"

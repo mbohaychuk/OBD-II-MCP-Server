@@ -15,6 +15,9 @@ from collections.abc import Iterator
 
 import pytest
 
+# Fixed port: the one session-scoped emulator is shared by all tests. This
+# means the suite is NOT safe under pytest-xdist (`-n` would spawn multiple
+# workers contending for the same port) — run it single-process.
 SIMULATOR_PORT = 35000
 SIMULATOR_HOST = "localhost"
 SIMULATOR_URL = f"socket://{SIMULATOR_HOST}:{SIMULATOR_PORT}"

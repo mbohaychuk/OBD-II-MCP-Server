@@ -102,6 +102,19 @@ async def test_record_session_unknown_pid_raises() -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_record_session_rejects_non_readable_pid_up_front() -> None:
+    """A destructive/non-Mode-01-09 command (e.g. CLEAR_DTC) is refused before
+    sampling — it must never be dispatched per-tick around the elicitation."""
+    with pytest.raises(ValueError, match="readable Mode 01/09"):
+        await record_session(
+            None,  # type: ignore[arg-type]
+            duration_s=0.1,
+            pids=["RPM", "CLEAR_DTC"],
+            hz_target=1.0,
+        )
+
+
 class _FastStubClient:
     """Returns canned readings immediately — exercises scheduling without a bus."""
 

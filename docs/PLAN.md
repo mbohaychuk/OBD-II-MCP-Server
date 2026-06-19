@@ -2,7 +2,7 @@
 
 **Goal.** A Python MCP server that bridges any MCP host (Claude Desktop, Cursor, Mechanics Sidekick) to a live OBD-II port via an ELM327 adapter. Published to Smithery + mcp.so. Paired with a repair-knowledge RAG (Mechanics Sidekick, a separate project) for grounded diagnostic conversations.
 
-**Status.** Phase 3 tool surface complete against the Ircama simulator and hardened. 11 tools: `record_session` (MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), and `lookup_recalls_and_complaints` (NHTSA public API). **Release unblocked** — depends on PyPI `obd==0.7.3` (byte-identical to the old commit pin), version 0.1.0, wheel metadata PyPI-valid (see `docs/RELEASE.md` and the 2026-06-16 DECISIONS entry). 116 tests green; ruff / mypy strict clean; GitHub Actions CI added. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path. Publishing to PyPI / Smithery / mcp.so awaits a token + go-ahead.
+**Status.** Phase 3 tool surface complete against the Ircama simulator and hardened. 11 tools: `record_session` (MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), and `lookup_recalls_and_complaints` (NHTSA public API). **Release unblocked** — depends on PyPI `obd==0.7.3` (byte-identical to the old commit pin), version 0.1.0, wheel metadata PyPI-valid (see `docs/RELEASE.md` and the 2026-06-16 DECISIONS entry). 142 tests green; ruff / mypy strict clean; GitHub Actions CI added. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path. Publishing to PyPI / Smithery / mcp.so awaits a token + go-ahead.
 
 Each decision below has a rationale captured in `DECISIONS.md`. Don't re-litigate without updating that file.
 
@@ -56,18 +56,19 @@ Purpose-built tools, not a raw command passthrough. The ergonomics differentiate
 
 | Tool | Annotations | Purpose |
 |---|---|---|
-| `get_vehicle_info()` | readOnly, idempotent | VIN, calibration IDs, CVN, connected protocol, adapter voltage, link status. Enriched with NHTSA vPIC → year/make/model/displacement. |
+| `ping()` | readOnly, idempotent | Health check; returns `"pong"`. |
+| `get_vehicle_info()` | readOnly, idempotent, openWorld | VIN, calibration IDs, CVN, connected protocol, adapter voltage, link status. Enriched with NHTSA vPIC → year/make/model/displacement. |
 | `list_supported_pids()` | readOnly, idempotent | Probes ECU; returns only PIDs this vehicle supports, with decoded names + units. |
-| `read_live_data(pids: list[str])` | readOnly | Snapshot read. Decoded values + units + timestamp. |
-| `record_session(duration_s, pids, hz_target)` | readOnly | Streams progress via `ctx.report_progress`. Returns timeseries + resource URI for replay. |
-| `read_dtcs(scope="all")` | readOnly, idempotent | scope ∈ {stored, pending, all}. Joined with Wal33D DB for descriptions. (Permanent / Mode 0A deferred.) |
+| `read_live_data(pids: list[str])` | readOnly | Snapshot read of Mode 01/09 PIDs. Uniform rows (value/unit/error). Decoded values + units + timestamp. |
+| `record_session(duration_s, pids, hz_target)` | **not** readOnly (persists a session) | Streams progress via `ctx.report_progress`. Returns timeseries + resource URI for replay. |
+| `read_dtcs(scope="all", make?)` | readOnly, idempotent | scope ∈ {stored, pending, all}. Joined with Wal33D DB; each code carries a `source` (generic/manufacturer/wire). Pass `make` to resolve manufacturer-range codes. (Permanent / Mode 0A deferred.) |
 | `read_freeze_frame(frame_index=0)` | readOnly, idempotent | Mode 02 sensor snapshot at DTC-set moment. |
 | `read_readiness_monitors()` | readOnly, idempotent | Emissions monitor completion status. Required pre-check for `clear_dtcs`. |
 | `list_manufacturer_signals(make, model, year?)` | readOnly, idempotent | Bundled OBDb Mode 22 signal catalogue (Ford Mustang + F-150); metadata only, live Mode 22 reads deferred. |
-| `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent | NHTSA public API. (TSBs + investigations are not publicly served; see DECISIONS.) |
-| `clear_dtcs()` | destructive, requires elicitation | Runs `read_readiness_monitors` first and surfaces incomplete-monitor warning in the elicit prompt. |
+| `lookup_recalls_and_complaints(year, make, model)` | readOnly, idempotent, openWorld | NHTSA public API. (TSBs + investigations are not publicly served; see DECISIONS.) |
+| `clear_dtcs()` | destructive, requires elicitation | Runs `read_readiness_monitors` first and surfaces incomplete-monitor warning in the elicit prompt. Refuses with `elicitation_unsupported` if the host can't confirm. |
 
-(The DTC-description join planned as a standalone `decode_dtc` tool was folded into `read_dtcs`; manufacturer data is exposed via `list_manufacturer_signals`. `ping()` is also registered as a health check.)
+(The DTC-description join planned as a standalone `decode_dtc` tool was folded into `read_dtcs`.)
 
 ## 3. Phased roadmap
 
@@ -158,7 +159,7 @@ The demo proves: tool composition, grounded diagnosis, safety gating. That's the
 
 ## 6. Open items
 
-- [ ] Pick OBDLink model (CX vs EX) and order before Phase 3 demo recording.
-- [ ] Decide whether to bundle a subset of `OBDb/*` JSONs in-repo or fetch at runtime (leaning bundle for offline use).
+- [x] ~~Pick OBDLink model (CX vs EX)~~ — CX (the demo target in `docs/DEMO.md`).
+- [x] ~~Bundle a subset of `OBDb/*` JSONs vs fetch at runtime~~ — bundled for offline use (Mustang + F-150), per DECISIONS 2026-04-23.
 - [ ] Verify 2006 A8 protocol (CAN vs K-line) with adapter + simulator first contact.
 - [ ] Confirm Claude Desktop's current elicitation UX — version-dependent.
