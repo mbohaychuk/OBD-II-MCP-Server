@@ -30,13 +30,12 @@ async def test_every_supported_pid_decodes_or_errors_cleanly(elm_simulator: str)
         assert len(readings) == len(names)
         for reading, name in zip(readings, names, strict=True):
             assert reading["name"] == name
-            if "error" in reading:
+            if reading["error"] is not None:
                 assert reading["error"] in _ALLOWED_ERROR_CODES, reading
                 continue
-            # Success shape: value present (may be None for enum-like PIDs),
-            # unit either string or None, pid populated, timestamp set.
-            assert "value" in reading, reading
-            assert "unit" in reading
+            # Success: error null, unit a string or None, pid populated,
+            # timestamp set (value may be None for enum-like PIDs).
+            assert reading["unit"] is None or isinstance(reading["unit"], str)
             assert reading["pid"] is not None
             assert isinstance(reading["timestamp"], float)
     finally:

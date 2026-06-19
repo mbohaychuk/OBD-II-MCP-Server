@@ -54,10 +54,21 @@ async def test_read_tools_are_marked_read_only() -> None:
         "read_dtcs",
         "read_freeze_frame",
         "read_readiness_monitors",
-        "record_session",
         "list_manufacturer_signals",
         "lookup_recalls_and_complaints",
     ):
         ann = by_name[name].annotations
         assert ann is not None, name
         assert ann.readOnlyHint is True, name
+
+
+@pytest.mark.asyncio
+async def test_record_session_is_not_read_only() -> None:
+    """record_session persists a session and mints an obd:// resource, so it
+    modifies server state — readOnlyHint must be false (but not destructive)."""
+    tools = await mcp.list_tools()
+    rec = next(t for t in tools if t.name == "record_session")
+    assert rec.annotations is not None
+    assert rec.annotations.readOnlyHint is False
+    assert rec.annotations.destructiveHint is False
+    assert rec.annotations.idempotentHint is False

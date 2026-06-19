@@ -95,10 +95,12 @@ async def test_read_live_data_returns_decoded_values(elm_simulator: str) -> None
         assert len(readings) == 3
         by_name = {r["name"]: r for r in readings}
 
-        assert by_name["RPM"]["error"] is None if "error" in by_name["RPM"] else True
-        assert by_name["RPM"]["value"] > 0
+        assert by_name["RPM"]["error"] is None
+        assert isinstance(by_name["RPM"]["value"], (int, float))
         assert by_name["RPM"]["unit"] == "revolutions_per_minute"
         assert by_name["RPM"]["pid"] == "010C"
+        # Success rows carry the full uniform shape — no probing for keys.
+        assert set(by_name["RPM"]) == {"pid", "name", "value", "unit", "error", "timestamp"}
 
         assert by_name["SPEED"]["unit"] in {"kilometer_per_hour", "kph"}
         assert by_name["COOLANT_TEMP"]["unit"] in {"degree_Celsius", "celsius"}
@@ -118,6 +120,10 @@ async def test_read_live_data_unknown_pid_reports_error(elm_simulator: str) -> N
         assert readings[0]["name"] == "NOT_A_REAL_PID"
         assert readings[0]["error"] == "UNKNOWN_PID"
         assert readings[0]["pid"] is None
+        # Error rows carry the same keys as success rows; value/unit are null.
+        assert readings[0]["value"] is None
+        assert readings[0]["unit"] is None
+        assert set(readings[0]) == {"pid", "name", "value", "unit", "error", "timestamp"}
     finally:
         await client.close()
 

@@ -167,56 +167,62 @@ async def list_supported_pids(client: ObdClient) -> list[dict[str, str]]:
 _READABLE_MODES: frozenset[int] = frozenset({1, 9})
 
 
+def _live_entry(
+    pid: str | None,
+    name: str,
+    *,
+    value: Any = None,
+    unit: str | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """A read_live_data row. Every row carries the same keys so callers never
+    have to probe whether `value` or `error` is present: on success `error` is
+    null; on failure `value`/`unit` are null."""
+    return {
+        "pid": pid,
+        "name": name,
+        "value": value,
+        "unit": unit,
+        "error": error,
+        "timestamp": time.time(),
+    }
+
+
 async def read_live_data(client: ObdClient, pids: list[str]) -> list[dict[str, Any]]:
     """Snapshot reading of one or more Mode 01/09 PIDs, decoded.
 
-    For each name in `pids`:
-      - unknown name → {error: "UNKNOWN_PID"}
-      - known but not a Mode 01/09 read → {error: "NOT_A_READABLE_PID"}
-      - known but not advertised by ECU → {error: "NOT_SUPPORTED"}
-      - query returned nothing → {error: "NO_DATA"}
-      - success → {value, unit}  (unit may be null for non-dimensional values)
+    Returns one uniform row per requested name (keys: pid, name, value, unit,
+    error, timestamp). Exactly one of `value`/`error` is meaningful:
+      - unknown name → error="UNKNOWN_PID"
+      - known but not a Mode 01/09 read → error="NOT_A_READABLE_PID"
+      - known but not advertised by ECU → error="NOT_SUPPORTED"
+      - query returned nothing → error="NO_DATA"
+      - success → value (+ unit, null for non-dimensional values), error=null
     """
     results: list[dict[str, Any]] = []
     for name in pids:
-        now = time.time()
         if not obd.commands.has_name(name):
-            results.append({"pid": None, "name": name, "error": "UNKNOWN_PID", "timestamp": now})
+            results.append(_live_entry(None, name, error="UNKNOWN_PID"))
             continue
         cmd = obd.commands[name]
         pid_hex = cmd.command.decode("ascii")
         if cmd.mode not in _READABLE_MODES:
-            results.append(
-                {"pid": pid_hex, "name": name, "error": "NOT_A_READABLE_PID", "timestamp": now}
-            )
+            results.append(_live_entry(pid_hex, name, error="NOT_A_READABLE_PID"))
             continue
         if not await client.supports(cmd):
-            results.append(
-                {"pid": pid_hex, "name": name, "error": "NOT_SUPPORTED", "timestamp": now}
-            )
+            results.append(_live_entry(pid_hex, name, error="NOT_SUPPORTED"))
             continue
         resp = await client.query(cmd)
         if resp.is_null():
-            results.append(
-                {"pid": pid_hex, "name": name, "error": "NO_DATA", "timestamp": time.time()}
-            )
+            results.append(_live_entry(pid_hex, name, error="NO_DATA"))
             continue
         serialized = _serialize_value(resp.value)
         if isinstance(serialized, dict) and "magnitude" in serialized and "unit" in serialized:
-            value: Any = serialized["magnitude"]
-            unit: str | None = serialized["unit"]
+            results.append(
+                _live_entry(pid_hex, name, value=serialized["magnitude"], unit=serialized["unit"])
+            )
         else:
-            value = serialized
-            unit = None
-        results.append(
-            {
-                "pid": pid_hex,
-                "name": name,
-                "value": value,
-                "unit": unit,
-                "timestamp": time.time(),
-            }
-        )
+            results.append(_live_entry(pid_hex, name, value=serialized))
     return results
 
 
@@ -543,7 +549,10 @@ async def record_session(
         now = time.time()
         samples.append({"t": now - started_at, "readings": readings})
         if progress is not None:
-            await progress(len(samples), target_count)
+            # target_count is hz×duration; a fast adapter or scheduler jitter can
+            # squeeze in an extra sample past it, so clamp to avoid >100% in hosts
+            # that render current/total as a percentage.
+            await progress(min(len(samples), target_count), target_count)
         next_t = max(next_t + interval, now)
 
     return {

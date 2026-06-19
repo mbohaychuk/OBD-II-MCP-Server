@@ -171,7 +171,14 @@ class _ClearDtcsConfirmation(BaseModel):
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=False),
+    # Not read-only: it mints a session_id and persists the timeseries under an
+    # obd:// resource, modifying server state. Non-destructive and not
+    # idempotent (each call yields a new session).
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+    ),
 )
 async def record_session(
     ctx: Context,  # type: ignore[type-arg]
