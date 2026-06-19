@@ -7,7 +7,7 @@ into `Signal` records, and applies the `filter` year bounds.
 
 from __future__ import annotations
 
-from obd_mcp.obdb import Signal, load_signals
+from obd_mcp.obdb import Signal, _matches_filter, load_signals
 
 
 def test_load_signals_returns_empty_for_unknown_make_or_model() -> None:
@@ -42,16 +42,14 @@ def test_load_signals_make_model_are_case_insensitive() -> None:
 
 
 def test_load_signals_year_filter_narrows_result() -> None:
-    """OBDb `filter` gates commands by year. Filtering should reduce or
-    keep the signal count — never increase it."""
+    """OBDb `filter` gates commands by year. A year filter must strictly
+    reduce the count, not just keep it — a `<=` bound would also pass if the
+    filter silently stopped filtering."""
     unfiltered = load_signals("Ford", "F-150")
     filtered_1990 = load_signals("Ford", "F-150", year=1990)
     filtered_2020 = load_signals("Ford", "F-150", year=2020)
-    assert len(filtered_1990) <= len(unfiltered)
-    assert len(filtered_2020) <= len(unfiltered)
-    # 2020 is within the modern F-150 range so should get a non-empty
-    # result; 1990 predates most OBDb coverage.
-    assert len(filtered_2020) > 0
+    assert 0 < len(filtered_1990) < len(unfiltered)
+    assert 0 < len(filtered_2020) < len(unfiltered)
 
 
 def test_load_signals_filter_years_list_matches_exact() -> None:
@@ -60,6 +58,27 @@ def test_load_signals_filter_years_list_matches_exact() -> None:
     signals = load_signals("Ford", "Mustang", year=2025)
     # Sanity: 2025 Mustang should have at least some signals.
     assert len(signals) > 0
+
+
+def test_matches_filter_branches() -> None:
+    """The bundled JSONs only use bare from/to bounds, so the `years`-list
+    branches of _matches_filter are never exercised by real data. Pin their
+    precedence directly: an in-list year short-circuits true; an out-of-list
+    year is false unless a from/to range also admits it; a non-dict spec is
+    unconditionally included."""
+    # years list only
+    assert _matches_filter({"years": [2020, 2022]}, 2020) is True
+    assert _matches_filter({"years": [2020, 2022]}, 2021) is False
+    # years list + range: out-of-list year falls through to the range
+    assert _matches_filter({"years": [2020], "from": 2018, "to": 2024}, 2019) is True
+    assert _matches_filter({"years": [2020], "from": 2018, "to": 2024}, 2030) is False
+    # range only
+    assert _matches_filter({"from": 2015}, 2016) is True
+    assert _matches_filter({"from": 2015}, 2014) is False
+    assert _matches_filter({"to": 2015}, 2016) is False
+    # no/invalid spec → unconditional include
+    assert _matches_filter(None, 2020) is True
+    assert _matches_filter({}, 2020) is True
 
 
 def test_signal_record_has_request_hex_from_cmd_dict() -> None:
