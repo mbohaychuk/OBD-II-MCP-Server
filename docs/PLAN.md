@@ -2,7 +2,7 @@
 
 **Goal.** A Python MCP server that bridges any MCP host (Claude Desktop, Cursor, Mechanics Sidekick) to a live OBD-II port via an ELM327 adapter. Published to Smithery + mcp.so. Paired with a repair-knowledge RAG (Mechanics Sidekick, a separate project) for grounded diagnostic conversations.
 
-**Status.** Phase 3 tool surface complete against the Ircama simulator and hardened. 11 tools: `record_session` (MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), and `lookup_recalls_and_complaints` (NHTSA public API). **Release unblocked** — depends on PyPI `obd==0.7.3` (byte-identical to the old commit pin), version 0.1.0, wheel metadata PyPI-valid (see `docs/RELEASE.md` and the 2026-06-16 DECISIONS entry). 116 tests green; ruff / mypy strict clean; GitHub Actions CI added. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path. Publishing to PyPI / Smithery / mcp.so awaits a token + go-ahead.
+**Status.** Phase 3 tool surface complete against the Ircama simulator and hardened. 11 tools: `record_session` (MCP resource replay at `obd://sessions/{id}.json`), `list_manufacturer_signals` (OBDb Ford signal sets bundled), and `lookup_recalls_and_complaints` (NHTSA public API). **Release unblocked** — depends on PyPI `obd==0.7.3` (byte-identical to the old commit pin), version 0.1.0, wheel metadata PyPI-valid (see `docs/RELEASE.md` and the 2026-06-16 DECISIONS entry). 142 tests green; ruff / mypy strict clean; GitHub Actions CI added. Remaining Phase-3 gate: record the hero demo on the 2025 Mustang once the OBDLink CX arrives (`docs/DEMO.md`). Phase-2 field work still open: legacy-protocol validation on the 2006 A8, Bluetooth-classic path. Publishing to PyPI / Smithery / mcp.so awaits a token + go-ahead.
 
 Each decision below has a rationale captured in `DECISIONS.md`. Don't re-litigate without updating that file.
 
@@ -159,7 +159,7 @@ The demo proves: tool composition, grounded diagnosis, safety gating. That's the
 
 ## 6. Open items
 
-- [x] ~~Pick OBDLink model (CX vs EX)~~ — CX, per DECISIONS 2026-04-22.
+- [x] ~~Pick OBDLink model (CX vs EX)~~ — CX (the demo target in `docs/DEMO.md`).
 - [x] ~~Bundle a subset of `OBDb/*` JSONs vs fetch at runtime~~ — bundled for offline use (Mustang + F-150), per DECISIONS 2026-04-23.
 - [ ] Verify 2006 A8 protocol (CAN vs K-line) with adapter + simulator first contact.
 - [ ] Confirm Claude Desktop's current elicitation UX — version-dependent.
