@@ -9,12 +9,14 @@ transport, FastMCP. See `docs/PLAN.md` for roadmap and `docs/DECISIONS.md`
 for the load-bearing design choices.
 
 Status: Phase 3 tool surface complete against the Ircama simulator and
-hardened (v0.1.0, 116 tests, CI). 11 tools — `record_session` (with MCP
+hardened (v0.1.0, 148 tests, CI). 11 tools — `record_session` (with MCP
 resource replay), `list_manufacturer_signals` (bundled OBDb Ford signal
 sets), and NHTSA recalls/complaints.
-Field validation on the 2006 A8 (legacy protocols) and Bluetooth-classic
-path still pending a garage session. Demo video: TBD (recording on the
-2025 Mustang EcoBoost once the OBDLink CX adapter arrives).
+Confirmed end-to-end on a real vehicle: a 2015 F-150 (5.0L) read live
+over an ELM327 adapter through the Mechanics Sidekick client (live PIDs,
+DTCs, freeze frame, and a matching NHTSA recall). Still pending a garage
+session: the 2006 A8 (legacy K-line protocols) and the Bluetooth-classic
+path.
 
 ## Quick start
 
